@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 const double ANALITIC_I = 0.0;
-const double COORDS_MIN[3] = {-1.0, -1.0, -1.0};
+const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
 const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
 const int MAX_STEPS = 10000;
 
@@ -33,6 +33,10 @@ int main(int argc, char **argv) {
         return 0;
     }
     eps = atof(argv[1]);
+    if (eps <= 0.0) {
+        printf("invalid eps\n");
+        return 0;
+    }
 
     MPI_Init(&argc, &argv);
 
@@ -61,7 +65,7 @@ int main(int argc, char **argv) {
             count += size;
             I = val_sum * 8 / count;
             err = fabs(I - ANALITIC_I);
-            is_finished = count > MAX_STEPS || err < eps;
+            is_finished = count > MAX_STEPS - size || err < eps;
         }
         MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
         if (is_finished) {
