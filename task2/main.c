@@ -7,7 +7,8 @@
 const double ANALITIC_I = 0.06225419868;
 const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
 const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
-#define N_POINTS 1 // number of points generated in each MPI process in each step
+const int MAX_N_POINTS = 1000000; // max number of generated points at all
+const int N_POINTS = 1;           // number of points generated in each MPI process in each step
 
 double f(double x, double y, double z) {
     double xz_sq = x * x + z * z;
@@ -89,7 +90,7 @@ int main(int argc, char **argv) {
             count += step_n_points;
             I = val_sum / count;
             err = fabs(I - analytic_I);
-            is_finished = err < eps;
+            is_finished = count > MAX_N_POINTS - step_n_points || err < eps;
         }
         MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
         if (is_finished) {
