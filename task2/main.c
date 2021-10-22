@@ -4,10 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-const double ANALITIC_I = 0.0;
+const double ANALITIC_I = 0.06225419868;
 const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
 const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
-const int MAX_STEPS = 10000;
 
 double f(double x, double y, double z) {
     double xz_sq = x * x + z * z;
@@ -22,11 +21,11 @@ int main(int argc, char **argv) {
     int size, rank;
     int count = 0, is_finished = 0;
     double coords[3];
-    double eps, time;
     double val, val_sum = 0.0;
-    double I, err;
+    double volume, analytic_I = ANALITIC_I;
+    double I, err, eps;
     double start, finish;
-    double max_time;
+    double time, max_time;
 
     if (argc != 2) {
         printf("Usage: ./main {eps}\n");
@@ -45,33 +44,47 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    if (rank == 0) {
+        volume = 1.0;
+        for (int i = 0; i < 3; ++i) {
+            volume *= COORDS_MAX[i] - COORDS_MIN[i];
+        }
+        analytic_I /= volume; // for a small speedup
+    }
+
     // set random seed
     time = fmod(start, (double)INT_MAX - size);
     srand((int)time + rank);
 
     while (1) {
         // generate random coordinates
-        for (int j = 0; j < 3; ++j) {
-            coords[j] = (double)rand() / INT_MAX;
-            coords[j] = coords[j] * (COORDS_MAX[j] - COORDS_MIN[j]) + COORDS_MIN[j];
+        for (int i = 0; i < 3; ++i) {
+            coords[i] = (double)rand() / INT_MAX;
+            coords[i] = coords[i] * (COORDS_MAX[i] - COORDS_MIN[i]) + COORDS_MIN[i];
         }
 
         // compute and gather function values
         val = f(coords[0], coords[1], coords[2]);
-        MPI_Reduce(&val, &val_sum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0) {
+            MPI_Reduce(MPI_IN_PLACE, &val, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        } else {
+            MPI_Reduce(&val, 0, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        }
 
         // check finishing criterion
         if (rank == 0) {
+            val_sum += val;
             count += size;
-            I = val_sum * 8 / count;
-            err = fabs(I - ANALITIC_I);
-            is_finished = count > MAX_STEPS - size || err < eps;
+            I = val_sum / count;
+            err = fabs(I - analytic_I);
+            is_finished = err < eps;
         }
         MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
         if (is_finished) {
             break;
         }
     }
+    I *= volume;
 
     finish = MPI_Wtime();
     time = finish - start;
