@@ -7,6 +7,7 @@
 const double ANALITIC_I = 0.06225419868;
 const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
 const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
+#define N_POINTS 1 // number of points generated in each MPI process in each step
 
 double f(double x, double y, double z) {
     double xz_sq = x * x + z * z;
@@ -20,7 +21,8 @@ double f(double x, double y, double z) {
 int main(int argc, char **argv) {
     int size, rank;
     int count = 0, is_finished = 0;
-    double coords[3];
+    int step_n_points;
+    double coords[3], coords_diff[3];
     double val, val_sum = 0.0;
     double volume, analytic_I = ANALITIC_I;
     double I, err, eps;
@@ -44,27 +46,37 @@ int main(int argc, char **argv) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    // set random seed
+    time = fmod(start, (double)INT_MAX - size);
+    srand((int)time + rank);
+
+    // compute domain volume
     if (rank == 0) {
         volume = 1.0;
         for (int i = 0; i < 3; ++i) {
             volume *= COORDS_MAX[i] - COORDS_MIN[i];
         }
-        analytic_I /= volume; // for a small speedup
+        // for a small speedup
+        analytic_I /= volume;
     }
 
-    // set random seed
-    time = fmod(start, (double)INT_MAX - size);
-    srand((int)time + rank);
-
+    // precompute COORDS_MAX - COORDS_MAX and size * N_POINTS for a small speedup
+    for (int i = 0; i < 3; ++i) {
+        coords_diff[i] = COORDS_MAX[i] - COORDS_MIN[i];
+    }
+    step_n_points = size * N_POINTS;
     while (1) {
-        // generate random coordinates
-        for (int i = 0; i < 3; ++i) {
-            coords[i] = (double)rand() / INT_MAX;
-            coords[i] = coords[i] * (COORDS_MAX[i] - COORDS_MIN[i]) + COORDS_MIN[i];
-        }
+        val = 0.0;
+        for (int i = 0; i < N_POINTS; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                // in [0, 1]
+                coords[j] = (double)rand() / INT_MAX;
+                // in [COORDS_MIN, COORDS_MAX]
+                coords[j] = coords[j] * coords_diff[j] + COORDS_MIN[j];
+            }
 
-        // compute and gather function values
-        val = f(coords[0], coords[1], coords[2]);
+            val += f(coords[0], coords[1], coords[2]);
+        }
         if (rank == 0) {
             MPI_Reduce(MPI_IN_PLACE, &val, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         } else {
@@ -74,7 +86,7 @@ int main(int argc, char **argv) {
         // check finishing criterion
         if (rank == 0) {
             val_sum += val;
-            count += size;
+            count += step_n_points;
             I = val_sum / count;
             err = fabs(I - analytic_I);
             is_finished = err < eps;
