@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     }
     eps = atof(argv[1]);
     if (eps <= 0.0) {
-        printf("invalid eps\n");
+        printf("Invalid eps\n");
         return 0;
     }
 
@@ -59,13 +59,13 @@ int main(int argc, char **argv) {
         }
         // for a small speedup
         analytic_I /= volume;
+        step_n_points = size * N_POINTS;
     }
 
     // precompute COORDS_MAX - COORDS_MAX and size * N_POINTS for a small speedup
     for (int i = 0; i < 3; ++i) {
         coords_diff[i] = COORDS_MAX[i] - COORDS_MIN[i];
     }
-    step_n_points = size * N_POINTS;
     while (1) {
         val = 0.0;
         for (int i = 0; i < N_POINTS; ++i) {
@@ -75,7 +75,6 @@ int main(int argc, char **argv) {
                 // in [COORDS_MIN, COORDS_MAX]
                 coords[j] = coords[j] * coords_diff[j] + COORDS_MIN[j];
             }
-
             val += f(coords[0], coords[1], coords[2]);
         }
         if (rank == 0) {
@@ -83,7 +82,6 @@ int main(int argc, char **argv) {
         } else {
             MPI_Reduce(&val, 0, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
         }
-
         // check finishing criterion
         if (rank == 0) {
             val_sum += val;
