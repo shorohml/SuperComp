@@ -3,12 +3,13 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-const double ANALITIC_I = 0.06225419868;
+const double ANALITIC_I = 0.06225419868854213;
 const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
 const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
-const int MAX_N_POINTS = 1000000; // max number of generated points at all
-const int N_POINTS = 1;           // number of points generated in each MPI process in each step
+const int MAX_N_POINTS = (int)1e7; // max number of generated points at all
+const int N_POINTS = 1;            // number of points generated in each MPI process in each step
 
 double f(double x, double y, double z) {
     double xz_sq = x * x + z * z;
@@ -28,7 +29,7 @@ int main(int argc, char **argv) {
     double volume, analytic_I = ANALITIC_I;
     double I, err, eps;
     double start, finish;
-    double time, max_time;
+    double curr_time, max_time;
 
     if (argc != 2) {
         printf("Usage: ./main {eps}\n");
@@ -48,8 +49,10 @@ int main(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     // set random seed
-    time = fmod(start, (double)INT_MAX - size);
-    srand((int)time + rank);
+    curr_time = (double)time(NULL);
+    curr_time = fmod(curr_time, (double)INT_MAX - size);
+    MPI_Bcast(&curr_time, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    srand((int)curr_time + rank);
 
     // compute domain volume
     if (rank == 0) {
@@ -62,7 +65,7 @@ int main(int argc, char **argv) {
         step_n_points = size * N_POINTS;
     }
 
-    // precompute COORDS_MAX - COORDS_MAX and size * N_POINTS for a small speedup
+    // precompute COORDS_MAX - COORDS_MAX for a small speedup
     for (int i = 0; i < 3; ++i) {
         coords_diff[i] = COORDS_MAX[i] - COORDS_MIN[i];
     }
@@ -98,8 +101,8 @@ int main(int argc, char **argv) {
     I *= volume;
 
     finish = MPI_Wtime();
-    time = finish - start;
-    MPI_Reduce(&time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    curr_time = finish - start;
+    MPI_Reduce(&curr_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
         printf("%f %f %d %f\n", I, err, count, max_time);
