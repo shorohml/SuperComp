@@ -8,8 +8,6 @@
 const double ANALITIC_I = 0.06225419868854213;
 const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
 const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
-const int MAX_N_POINTS = (int)1e7; // max number of generated points at all
-const int N_POINTS = 1;            // number of points generated in each MPI process in each step
 
 double f(double x, double y, double z) {
     double xz_sq = x * x + z * z;
@@ -23,7 +21,7 @@ double f(double x, double y, double z) {
 int main(int argc, char **argv) {
     int size, rank;
     int count = 0, is_finished = 0;
-    int step_n_points;
+    int n_points, step_n_points;
     double coords[3], coords_diff[3];
     double val, val_sum = 0.0;
     double volume, analytic_I = ANALITIC_I;
@@ -31,13 +29,20 @@ int main(int argc, char **argv) {
     double start, finish;
     double curr_time, max_time;
 
-    if (argc != 2) {
-        printf("Usage: ./main {eps}\n");
+    if (argc != 3) {
+        printf("Usage: ./main {eps} {n_points}\n");
         return 0;
     }
+    // target approximation error
     eps = atof(argv[1]);
     if (eps <= 0.0) {
         printf("Invalid eps\n");
+        return 0;
+    }
+    // number of points generated in each MPI process in each step
+    n_points = atoi(argv[2]);
+    if (n_points <= 0.0) {
+        printf("Invalid n_points\n");
         return 0;
     }
 
@@ -62,7 +67,7 @@ int main(int argc, char **argv) {
         }
         // for a small speedup
         analytic_I /= volume;
-        step_n_points = size * N_POINTS;
+        step_n_points = size * n_points;
     }
 
     // precompute COORDS_MAX - COORDS_MAX for a small speedup
@@ -71,7 +76,7 @@ int main(int argc, char **argv) {
     }
     while (1) {
         val = 0.0;
-        for (int i = 0; i < N_POINTS; ++i) {
+        for (int i = 0; i < n_points; ++i) {
             for (int j = 0; j < 3; ++j) {
                 // in [0, 1]
                 coords[j] = (double)rand() / INT_MAX;
@@ -91,7 +96,7 @@ int main(int argc, char **argv) {
             count += step_n_points;
             I = val_sum / count;
             err = fabs(I - analytic_I);
-            is_finished = count > MAX_N_POINTS - step_n_points || err < eps;
+            is_finished = err < eps;
         }
         MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
         if (is_finished) {
@@ -105,7 +110,7 @@ int main(int argc, char **argv) {
     MPI_Reduce(&curr_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
-        printf("%f %f %d %f\n", I, err, count, max_time);
+        printf("%d %f %d %f %f %d %f\n", size, eps, n_points, I, err, count, max_time);
     }
 
     MPI_Finalize();
