@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
     }
     // number of runs with different seeds
     n_runs = atoi(argv[2]);
-    if (n_runs <= 0.0) {
+    if (n_runs <= 0) {
         printf("Invalid n_runs\n");
         return 0;
     }
