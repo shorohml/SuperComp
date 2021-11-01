@@ -20,17 +20,17 @@ double f(double x, double y, double z) {
 
 int main(int argc, char **argv) {
     int size, rank;
-    int count = 0, is_finished = 0;
-    int n_points, step_n_points;
+    int count, is_finished;
+    int n_points, step_n_points, n_runs;
     double coords[3], coords_diff[3];
-    double val, val_sum = 0.0;
-    double volume, analytic_I = ANALITIC_I;
+    double val, val_sum;
+    double volume, analytic_I;
     double I, err, eps;
     double start, finish;
     double curr_time, max_time;
 
-    if (argc != 3) {
-        printf("Usage: ./main {eps} {n_points}\n");
+    if (argc != 4) {
+        printf("Usage: ./main eps n_points n_runs\n");
         return 0;
     }
     // target approximation error
@@ -45,72 +45,88 @@ int main(int argc, char **argv) {
         printf("Invalid n_points\n");
         return 0;
     }
+    // number of runs with different seeds
+    n_runs = atoi(argv[3]);
+    if (n_runs <= 0.0) {
+        printf("Invalid n_runs\n");
+        return 0;
+    }
 
     MPI_Init(&argc, &argv);
-
-    start = MPI_Wtime();
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    // set random seed
-    curr_time = (double)time(NULL);
-    curr_time = fmod(curr_time, (double)INT_MAX - size);
+    if (rank == 0) {
+        printf("%d %f %d\n", size, eps, n_points);
+
+        curr_time = (double)time(NULL);
+        curr_time = fmod(curr_time, (double)INT_MAX - n_runs * size);
+    }
     MPI_Bcast(&curr_time, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    srand((int)curr_time + rank);
 
-    // compute domain volume
-    if (rank == 0) {
-        volume = 1.0;
-        for (int i = 0; i < 3; ++i) {
-            volume *= COORDS_MAX[i] - COORDS_MIN[i];
-        }
-        // for a small speedup
-        analytic_I /= volume;
-        step_n_points = size * n_points;
-    }
+    for (int run_idx = 0; run_idx < n_runs; ++run_idx) {
+        start = MPI_Wtime();
 
-    // precompute COORDS_MAX - COORDS_MAX for a small speedup
-    for (int i = 0; i < 3; ++i) {
-        coords_diff[i] = COORDS_MAX[i] - COORDS_MIN[i];
-    }
-    while (1) {
-        val = 0.0;
-        for (int i = 0; i < n_points; ++i) {
-            for (int j = 0; j < 3; ++j) {
-                // in [0, 1]
-                coords[j] = (double)rand() / INT_MAX;
-                // in [COORDS_MIN, COORDS_MAX]
-                coords[j] = coords[j] * coords_diff[j] + COORDS_MIN[j];
+        // set random seed
+        srand((int)curr_time + run_idx * size + rank);
+
+        // compute domain volume
+        if (rank == 0) {
+            volume = 1.0;
+            for (int i = 0; i < 3; ++i) {
+                volume *= COORDS_MAX[i] - COORDS_MIN[i];
             }
-            val += f(coords[0], coords[1], coords[2]);
+            // for a small speedup
+            analytic_I = ANALITIC_I / volume;
+            step_n_points = size * n_points;
         }
-        if (rank == 0) {
-            MPI_Reduce(MPI_IN_PLACE, &val, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        } else {
-            MPI_Reduce(&val, 0, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        }
-        // check finishing criterion
-        if (rank == 0) {
-            val_sum += val;
-            count += step_n_points;
-            I = val_sum / count;
-            err = fabs(I - analytic_I);
-            is_finished = err < eps;
-        }
-        MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        if (is_finished) {
-            break;
-        }
-    }
-    I *= volume;
 
-    finish = MPI_Wtime();
-    curr_time = finish - start;
-    MPI_Reduce(&curr_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        // precompute COORDS_MAX - COORDS_MAX for a small speedup
+        for (int i = 0; i < 3; ++i) {
+            coords_diff[i] = COORDS_MAX[i] - COORDS_MIN[i];
+        }
+        is_finished = 0;
+        count = 0;
+        val_sum = 0.0;
+        while (1) {
+            val = 0.0;
+            for (int i = 0; i < n_points; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    // in [0, 1]
+                    coords[j] = (double)rand() / INT_MAX;
+                    // in [COORDS_MIN, COORDS_MAX]
+                    coords[j] = coords[j] * coords_diff[j] + COORDS_MIN[j];
+                }
+                val += f(coords[0], coords[1], coords[2]);
+            }
+            if (rank == 0) {
+                MPI_Reduce(MPI_IN_PLACE, &val, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            } else {
+                MPI_Reduce(&val, 0, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            }
+            // check finishing criterion
+            if (rank == 0) {
+                val_sum += val;
+                count += step_n_points;
+                I = val_sum / count;
+                err = fabs(I - analytic_I);
+                is_finished = err < eps;
+            }
+            MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            if (is_finished) {
+                break;
+            }
+        }
+        I *= volume;
 
-    if (rank == 0) {
-        printf("%d %f %d %f %f %d %f\n", size, eps, n_points, I, err, count, max_time);
+        finish = MPI_Wtime();
+        curr_time = finish - start;
+        MPI_Reduce(&curr_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            printf("%f %f %d %f\n", I, err, count, max_time);
+        }
     }
 
     MPI_Finalize();
