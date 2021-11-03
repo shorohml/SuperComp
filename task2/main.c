@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     }
     // target approximation error
     eps = atof(argv[1]);
-    if (eps <= 0.0) {
+    if (eps <= 1e-16) {
         printf("Invalid eps\n");
         return 0;
     }

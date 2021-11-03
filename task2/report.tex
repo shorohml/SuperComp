@@ -1,0 +1,445 @@
+\documentclass[oneside, final, 12pt]{extarticle}
+\usepackage[T2A,T1]{fontenc}
+\usepackage[utf8x]{inputenc}
+\usepackage[english,russian]{babel}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{lmodern}
+\usepackage{textcomp}
+\usepackage{lastpage}
+\usepackage{vmargin}
+\usepackage{titlesec}
+\usepackage{mathptmx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{graphicx}
+\usepackage{subfig}
+\usepackage{pgf}
+\usepackage{float}
+\usepackage{titlesec}
+\usepackage{cancel}
+\usepackage{makecell}
+\usepackage{float}
+
+\allowdisplaybreaks
+
+\floatstyle{plaintop}
+\restylefloat{table}
+\restylefloat{figure}
+
+\titlelabel{\thetitle.\quad}
+
+\graphicspath{ {./imgs/} }
+
+\newlength{\mygraphwidth}\setlength{\mygraphwidth}{1.0\textwidth}
+
+\titlespacing*{\section}
+{0pt}{5.5ex plus 1ex minus .2ex}{4.3ex plus .2ex}
+\titlespacing*{\subsection}
+{0pt}{5.5ex plus 1ex minus .2ex}{4.3ex plus .2ex}
+\setpapersize{A4}
+\setmarginsrb{2cm}{1.5cm}{1.5cm}{1.5cm}{0pt}{0mm}{0pt}{13mm}
+\sloppy
+\linespread{1.3}
+
+\definecolor{mGreen}{rgb}{0,0.6,0}
+\definecolor{mPurple}{rgb}{0.58,0,0.82}
+
+\lstdefinestyle{CStyle}{,   
+    commentstyle=\color{mGreen},
+    keywordstyle=\color{magenta},
+    stringstyle=\color{mPurple},
+    basicstyle=\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2,
+    language=C
+}
+
+\begin{document}
+
+
+\normalsize
+
+\begin{titlepage}
+    \begin{center}
+        \textsc{Московский Государственный Университет имени М.В. Ломоносова\\[5mm]
+            Факультет вычислительной математики и кибернетики}
+        \centerline{\hfill\hrulefill\hrulefill\hfill}
+    \end{center}
+
+    \vfill
+    \vfill
+    \vfill
+    \vfill
+    \begin{center}
+        \Large
+        \textbf{Отчёт по практическому заданию «Численное интегрирование многомерных функций
+            методом Монте-Карло» \\
+            в рамках курса
+            «Суперкомпьютерное моделирование и технологии»}
+    \end{center}
+
+    \vfill
+    \vfill
+    \vfill
+    \hfill
+    \begin{flushright}
+        Вариант 6
+    \end{flushright}
+
+    \begin{flushright}
+        Выполнил: \\
+        Шорошов Григорий Максимович, \\
+        622 группа \\[5mm]
+    \end{flushright}
+
+    \vfill
+    \vfill
+    \vfill
+    \begin{center}
+        Москва, \the\year
+    \end{center}
+\end{titlepage}
+
+\parindent=1cm
+
+\newpage
+\section{Математическая постановка задачи}
+
+Функция $ f(x, y, z) = y \cdot \sin ( x^2 + z^2 ) $ --- непрерывна в ограниченной замкнутой области $ G = \{ (x, y, z): x^2 + y^2 + z^2 \leq 1, x \geq 0, y \geq 0, z \geq 0\} $.
+Требуется вычислить определенный интеграл:
+$$
+    I = \iiint_{G} f(x, y ,z) dx dy dz
+$$
+
+\section{Численный метод решения задачи}
+
+Метод Монте-Карло для численного интегрирования представлен в \cite{Bahvalov1987}.
+
+Область G ограниченна параллелепипедом: $ P: \begin{cases}
+        0 \leq x \leq 1 \\
+        0 \leq y \leq 1 \\
+        0 \leq z \leq 1
+    \end{cases} $
+
+Рассмотрим функцию: $ F(x, y, z) =  \begin{cases}
+        f(x, y, z), & \quad (x, y, z) \in G    \\
+        0 ,         & \quad (x, y, z) \notin G
+    \end{cases} $
+
+Преобразуем искомый интеграл:
+$$
+    I = \iiint_{G} f(x, y ,z) dx dy dz = \iiint_{P} F(x, y ,z   ) dx dy dz
+$$
+
+Пусть $ p_1(x_1, y_1, z_1), p_2(x_2, y_2, z_2), ... $ --- случайные точки, равномерно распределённые в $ P $.
+Возьмём $ n $ таких случайных точек. В качестве приближённого значения интеграла предлагается использовать выражение:
+\begin{align}
+    I \approx | P | \cdot \frac{1}{n} \sum_{i = 1}^n F(p_i)
+\end{align}
+
+где $ | P | $ --- объем параллелепипеда $ P $, $ | P | = 1 $.
+
+\section{Нахождение точного значения интеграла аналитически}
+
+\begin{align*}
+     & I = \iiint_{G} y \cdot \sin ( x^2 + z^2 ) dx dy dz = \int_0^1 y \iint_{\substack{ x^2 + z^2 \leq 1 - y^2                                                                                   \\ x \geq 0 \\ z \geq 0 }} \sin ( x^2 + z^2 ) dx dz dy = \\
+     & = \{ x = r \cos \phi, z = r \sin \phi, \text{ якобиан } \frac{ \partial (x, z) }{ \partial (r, \phi) } = r \} =                                                                            \\
+     & = \int_0^1 y \int_0^{\frac{\pi}{2}} \int_{0}^{\sqrt{1 - y^2}} r \sin r^2 dr d \phi dy = \frac{1}{2} \int_0^{\frac{\pi}{2}} d \phi \int_0^1 y \int_{0}^{\sqrt{1 - y^2}} \sin r^2 d r^2 dy = \\
+     & = \frac{\pi}{4} \int_0^1 y (- \cos r^2) |_{0}^{\sqrt{1 - y^2}} dy = \frac{\pi}{4} ( \int_0^1 y dy - \int_0^1 y \cos (1 - y^2 ) dy) =                                                       \\
+     & = \frac{\pi}{8} ( 1 - \int_{0}^{1} cos( y^2 - 1) d( y^2 - 1 ) ) = \frac{\pi}{8} ( 1 - sin( y^2 - 1 ) |_{0}^{1} ) = \frac{\pi}{8} (1 - \sin 1)
+\end{align*}
+
+\section{Описание программной реализации}
+
+Реализованный вариант расспаралелливания метода Монте-Карло --- параллельные процессы генерируют случайные точки независимо друг от друга.
+
+Определим глобальные переменные-константы:
+\begin{itemize}
+    \item ANALITIC\_I --- приближенное значение $ \frac{\pi}{8} (1 - \sin 1) $ с точностью до $ 10^{-16} $
+    \item COORDS\_MIN и COORDS\_MAX --- границы $ P $
+    \item N\_STEP\_POINTS --- число точек, генерируемое на каждом шаге алгоритма (в сумме во всех MPI-процессах)
+    \item MAX\_N\_STEPS --- ограничение числа шагов алгоритма
+\end{itemize}
+
+Затем определим функцию double f(double x, double y, double z), реализующую функцию $ f $ из математической постановки.
+
+Далее в функции main:
+
+\begin{enumerate}
+    \item обрабатываем параметры командной строки:
+
+          \begin{enumerate}
+              \item требуемая точность $ \epsilon $
+              \item число запусков с разными зернами
+          \end{enumerate}
+
+    \item инициализируем контекст MPI
+    \item получаем текущее время в 0 MPI-процессе и передаем в остальные c помощью функции MPI\_Bcast
+    \item инициализируем генератор псевдослучайных чисел в каждом MPI-процессе с помощью функции srand
+    \item в цикле:
+
+          \begin{enumerate}
+              \item в каждом процессе генерируем n\_proc\_step\_points = N\_STEP\_POINTS / size случайных точек и считаем сумму значений фунции $ f $
+              \item считаем сумму всех значений с помощью MPI\_Reduce
+              \item вычисляем ошибку
+              \item если ошибка меньше заданного $ \epsilon $ или превышено ограничение числа шагов алогритма, то завершаем цикл, иначе продолжаем
+          \end{enumerate}
+
+    \item вычисляем время выполнения в каждом MPI-процессе, среди полученных значений берём максимум (с помощью операции редукции)
+    \item выводим 4 числа:
+          \begin{enumerate}
+              \item посчитанное приближённое значение интеграла
+              \item ошибка посчитанного значения
+              \item количество сгенерированных случайных точек
+              \item время работы программы в секундах
+          \end{enumerate}
+    \item повторяем пункты 4-7 n\_runs раз
+\end{enumerate}
+
+Листинг программы приведен в приложении 1.
+
+\section{Исследование мастшабируемости программы на системах Blue Gene/P \cite{BlueGene} и
+  Polus \cite{Polus}}
+
+Запуски программы проведены на системах Blue Gene/P и Polus для числа MPI-процессов и значений входного параметра $ \epsilon $, указанных в таблицах.
+Запуски проводились с параметром n\_runs = 100, в таблицах приведены средние время работы и ошибка.  
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|l|l|l|l|}
+        \hline
+        Точность $ \epsilon $ & \makecell{Число                              \\MPI-процессов} & \makecell{Время работы \\ программы (с)} & Ускорение & Ошибка \\
+        \hline
+        1e-04                 & 1               & 0.065 & 1.000  & 6.247e-05 \\
+        \cline{2-5}
+                              & 4               & 0.012 & 5.239  & 5.686e-05 \\
+        \cline{2-5}
+                              & 16              & 0.004 & 15.738 & 5.770e-05 \\
+        \cline{2-5}
+                              & 64              & 0.002 & 41.848 & 6.221e-05 \\
+        \hline
+        2e-05                 & 1               & 0.155 & 1.000  & 1.183e-05 \\
+        \cline{2-5}
+                              & 4               & 0.105 & 1.485  & 1.107e-05 \\
+        \cline{2-5}
+                              & 16              & 0.049 & 3.142  & 1.173e-05 \\
+        \cline{2-5}
+                              & 64              & 0.011 & 13.691 & 1.136e-05 \\
+        \hline
+        8e-06                 & 1               & 2.218 & 1.000  & 4.520e-06 \\
+        \cline{2-5}
+                              & 4               & 0.194 & 11.437 & 4.730e-06 \\
+        \cline{2-5}
+                              & 16              & 0.097 & 22.881 & 4.470e-06 \\
+        \cline{2-5}
+                              & 64              & 0.035 & 64.041 & 4.410e-06 \\
+        \hline
+    \end{tabular}
+    \caption{Таблица с результатами расчётов для системы Blue Gene/P}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|l|l|l|l|}
+        \hline
+        Точность $ \epsilon $ & \makecell{Число                              \\MPI-процессов} & \makecell{Время работы \\ программы (с)} & Ускорение & Ошибка \\
+        \hline
+        3e-05                 & 1               & 0.014 & 1.000  & 1.708e-05 \\
+        \cline{2-5}
+                              & 4               & 0.007 & 1.989  & 1.624e-05 \\
+        \cline{2-5}
+                              & 16              & 0.006 & 2.304  & 1.749e-05 \\
+        \cline{2-5}
+                              & 64              & 0.005 & 2.581  & 1.720e-05 \\
+        \hline
+        5e-06                 & 1               & 0.316 & 1.000  & 2.820e-06 \\
+        \cline{2-5}
+                              & 4               & 0.027 & 11.632 & 2.880e-06 \\
+        \cline{2-5}
+                              & 16              & 0.028 & 11.174 & 2.810e-06 \\
+        \cline{2-5}
+                              & 64              & 0.029 & 11.056 & 2.710e-06 \\
+        \hline
+        2e-06                 & 1               & 0.921 & 1.000  & 7.200e-07 \\
+        \cline{2-5}
+                              & 4               & 0.085 & 10.836 & 7.100e-07 \\
+        \cline{2-5}
+                              & 16              & 0.163 & 5.663  & 6.600e-07 \\
+        \cline{2-5}
+                              & 64              & 0.077 & 11.886 & 6.500e-07 \\
+        \hline
+    \end{tabular}
+    \caption{Таблица с результатами расчётов для системы Polus}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\mygraphwidth]{BlueGeneP.pdf}
+    \caption{Зависимость ускорения от числа MPI-процессов для системы Blue Gene/P}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\mygraphwidth]{Polus.pdf}
+    \caption{Зависимость ускорения от числа MPI-процессов для системы Polus}
+\end{figure}
+
+Поскольку при каждом запуске генерируется новая последовательность точек, ускорение в некоторых случаях получилось больше числа MPI-процессов и изменяется в несколько раз при изменении $ \epsilon $.
+Программа лучше масштабируется на системе Blue Gene/P.
+
+\begin{thebibliography}{3}
+    \bibitem{Bahvalov1987}
+    Бахвалов Н.С., Жидков Н.П., Кобельков Г.М. ЧИСЛЕННЫЕ МЕТОДЫ. --- M.: Наука, 1987.
+    \bibitem{BlueGene}
+    IBM Blue Gene/P. --- http://hpc.cmc.msu.ru/bgp
+    \bibitem{Polus}
+    IBM Polus. --- http://hpc.cs.msu.su/polus
+\end{thebibliography}
+
+\section*{Приложение 1}
+
+Листинг програмной реализации
+
+\begin{lstlisting}[language=C, style=CStyle, numbers=left]
+#include <limits.h>
+#include <math.h>
+#include <mpi.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+const double ANALITIC_I = 0.06225419868854213;
+const double COORDS_MIN[3] = {0.0, 0.0, 0.0};
+const double COORDS_MAX[3] = {1.0, 1.0, 1.0};
+const int N_STEP_POINTS = 640;
+const int MAX_N_STEPS = 1000000;
+
+double f(double x, double y, double z) {
+    double xz_sq = x * x + z * z;
+    if (xz_sq + y * y > 1) {
+        return 0.0;
+    } else {
+        return sin(xz_sq) * y;
+    }
+}
+
+int main(int argc, char **argv) {
+    int size, rank;
+    int count, is_finished;
+    int n_runs, n_proc_step_points, n_step_points;
+    double coords[3], coords_diff[3];
+    double val, val_sum;
+    double volume, analytic_I;
+    double I, err, eps;
+    double start, finish;
+    double curr_time, max_time;
+
+    if (argc != 3) {
+        printf("Usage: ./main eps n_runs\n");
+        return 0;
+    }
+    // target approximation error
+    eps = atof(argv[1]);
+    if (eps <= 1e-16) {
+        printf("Invalid eps\n");
+        return 0;
+    }
+    // number of runs with different seeds
+    n_runs = atoi(argv[2]);
+    if (n_runs <= 0) {
+        printf("Invalid n_runs\n");
+        return 0;
+    }
+
+    MPI_Init(&argc, &argv);
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    if (rank == 0) {
+        printf("%d %f\n", size, eps);
+
+        curr_time = (double)time(NULL);
+        curr_time = fmod(curr_time, (double)INT_MAX - n_runs * size);
+    }
+    MPI_Bcast(&curr_time, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    for (int run_idx = 0; run_idx < n_runs; ++run_idx) {
+        start = MPI_Wtime();
+
+        // set random seed
+        srand((int)curr_time + run_idx * size + rank);
+
+        // compute domain volume
+        if (rank == 0) {
+            volume = 1.0;
+            for (int i = 0; i < 3; ++i) {
+                volume *= COORDS_MAX[i] - COORDS_MIN[i];
+            }
+            // for a small speedup
+            analytic_I = ANALITIC_I / volume;
+        }
+        n_proc_step_points = N_STEP_POINTS / size;
+        n_step_points = n_proc_step_points * size;
+
+        // precompute COORDS_MAX - COORDS_MAX for a small speedup
+        for (int i = 0; i < 3; ++i) {
+            coords_diff[i] = COORDS_MAX[i] - COORDS_MIN[i];
+        }
+        is_finished = 0;
+        count = 0;
+        val_sum = 0.0;
+        while (1) {
+            val = 0.0;
+            for (int i = 0; i < n_proc_step_points; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    // in [0, 1]
+                    coords[j] = (double)rand() / INT_MAX;
+                    // in [COORDS_MIN, COORDS_MAX]
+                    coords[j] = coords[j] * coords_diff[j] + COORDS_MIN[j];
+                }
+                val += f(coords[0], coords[1], coords[2]);
+            }
+            if (rank == 0) {
+                MPI_Reduce(MPI_IN_PLACE, &val, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            } else {
+                MPI_Reduce(&val, 0, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+            }
+            // check finishing criterion
+            if (rank == 0) {
+                val_sum += val;
+                ++count;
+                I = val_sum / (count * n_step_points);
+                err = fabs(I - analytic_I);
+                is_finished = err < eps || count >= MAX_N_STEPS;
+            }
+            MPI_Bcast(&is_finished, 1, MPI_INT, 0, MPI_COMM_WORLD);
+            if (is_finished) {
+                break;
+            }
+        }
+        I *= volume;
+
+        finish = MPI_Wtime();
+        curr_time = finish - start;
+        MPI_Reduce(&curr_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        if (rank == 0) {
+            printf("%f %f %d %f\n", I, err, count * n_step_points, max_time);
+        }
+    }
+
+    MPI_Finalize();
+    return 0;
+}
+\end{lstlisting}
+
+\end{document}
