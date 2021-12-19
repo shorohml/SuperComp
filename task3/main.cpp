@@ -52,6 +52,8 @@ template <typename T> class Grid3D {
         data = std::vector<T>(size);
     }
 
+    T *get_data() { return data.data(); }
+
     T &get(std::size_t i, std::size_t j, std::size_t k) { return data[(i * P_y + j) * P_z + k]; }
 
     void set(std::size_t i, std::size_t j, std::size_t k, const T &val) {
@@ -88,80 +90,6 @@ template <typename T> struct Block3D {
         grid = Grid3D<T>(dims[0], dims[1], dims[2]);
     }
 };
-
-// class GridBlockSeparator {
-//   private:
-//     int P_x = 1, P_y = 1, P_z = 1;
-//     std::vector<int> factorization;
-//     std::vector<std::vector<int>> factorizations;
-
-//     void add_factorization(int num, int level);
-
-//   public:
-//     void compute_factorizations(int num, int num_factors);
-
-//     void separate(int num_blocks);
-
-//     std::vector<std::vector<int>> get_factorizations() { return factorizations; }
-
-//     int get_P_x() { return P_x; }
-
-//     int get_P_y() { return P_y; }
-
-//     int get_P_z() { return P_z; }
-// };
-
-// void GridBlockSeparator::add_factorization(int num, int level) {
-//     if (level == 0) {
-//         factorization.push_back(num);
-//         factorizations.push_back(factorization);
-//         factorization.pop_back();
-//         return;
-//     }
-
-//     int start = factorization.size() == 0 ? 1 : factorization[factorization.size() - 1];
-//     int next;
-//     for (int i = start; i < num + 1; ++i) {
-//         if (0 == num % i && (next = num / i) >= i) {
-//             factorization.push_back(i);
-//             add_factorization(next, level - 1);
-//             factorization.pop_back();
-//         }
-//     }
-// }
-
-// void GridBlockSeparator::compute_factorizations(int num, int num_factors) {
-//     factorization = std::vector<int>();
-//     factorizations = std::vector<std::vector<int>>();
-//     add_factorization(num, num_factors - 1);
-// }
-
-// void GridBlockSeparator::separate(int num_blocks) {
-//     compute_factorizations(num_blocks, 3);
-//     if (1 == factorizations.size()) {
-//         P_x = 1;
-//         P_y = 1;
-//         P_z = num_blocks;
-//     } else if (2 == factorizations.size()) {
-//         P_x = 1;
-//         P_y = factorizations[1][1];
-//         P_z = factorizations[1][2];
-//     } else {
-//         // minimize P_x + P_y + P_z
-//         int sum = factorizations[0][0] + factorizations[0][1] + factorizations[0][2];
-//         int min_idx = 0, min = sum;
-//         for (int i = 1; i < factorizations.size(); ++i) {
-//             sum = factorizations[i][0] + factorizations[i][1] + factorizations[i][2];
-//             if (sum < min) {
-//                 min = sum;
-//                 min_idx = i;
-//             }
-//         }
-//         P_x = factorizations[min_idx][0];
-//         P_y = factorizations[min_idx][1];
-//         P_z = factorizations[min_idx][2];
-//     }
-// }
 
 template <typename T> struct Block3DBound {
   public:
@@ -330,21 +258,41 @@ int main(int argc, char **argv) {
 
     // TODO: remove unecessary sends on grid boundary
     int src, dst;
-    for (int axis = 0; axis < 3; ++axis) {
-        MPI_Cart_shift(grid_comm, axis, 1, &src, &dst);
 
-        pack_face(block_0, static_cast<AXIS>(axis), true, sendbound.faces[2 * axis]);
-        MPI_Sendrecv(sendbound.faces[2 * axis].data(), sendbound.faces[2 * axis].size(), MPI_DOUBLE,
-                     src, 0, recvbound.faces[2 * axis + 1].data(),
-                     recvbound.faces[2 * axis + 1].size(), MPI_DOUBLE, dst, 0, grid_comm,
-                     MPI_STATUS_IGNORE);
+    // axis 0
+    MPI_Cart_shift(grid_comm, 0, 1, &src, &dst);
+    MPI_Sendrecv(block_0.grid.get_data(), recvbound.faces[1].size(), MPI_DOUBLE, src, 0,
+                 recvbound.faces[1].data(), recvbound.faces[1].size(), MPI_DOUBLE, dst, 0,
+                 grid_comm, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(block_0.grid.get_data() + (block_0.dims[0] - 1) * recvbound.faces[1].size(),
+                 sendbound.faces[1].size(), MPI_DOUBLE, dst, 0, recvbound.faces[0].data(),
+                 recvbound.faces[0].size(), MPI_DOUBLE, src, 0, grid_comm, MPI_STATUS_IGNORE);
 
-        pack_face(block_0, static_cast<AXIS>(axis), false, sendbound.faces[2 * axis + 1]);
-        MPI_Sendrecv(sendbound.faces[2 * axis + 1].data(), sendbound.faces[2 * axis + 1].size(),
-                     MPI_DOUBLE, dst, 0, recvbound.faces[2 * axis].data(),
-                     recvbound.faces[2 * axis].size(), MPI_DOUBLE, src, 0, grid_comm,
-                     MPI_STATUS_IGNORE);
-    }
+    // axis 1
+    MPI_Datatype face_type_1;
+    MPI_Type_vector(block_0.dims[0], block_0.dims[2], block_0.dims[1] * block_0.dims[2], MPI_DOUBLE,
+                    &face_type_1);
+    MPI_Type_commit(&face_type_1);
+
+    MPI_Cart_shift(grid_comm, 1, 1, &src, &dst);
+    MPI_Sendrecv(block_0.grid.get_data(), 1, face_type_1, src, 0, recvbound.faces[3].data(),
+                 recvbound.faces[3].size(), MPI_DOUBLE, dst, 0, grid_comm, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(block_0.grid.get_data() + (block_0.dims[1] - 1) * block_0.dims[2], 1, face_type_1,
+                 dst, 0, recvbound.faces[2].data(), recvbound.faces[2].size(), MPI_DOUBLE, src, 0,
+                 grid_comm, MPI_STATUS_IGNORE);
+
+    // axis 2
+    MPI_Datatype face_type_2;
+    MPI_Type_vector(block_0.dims[0] * block_0.dims[1], 1, block_0.dims[2], MPI_DOUBLE,
+                    &face_type_2);
+    MPI_Type_commit(&face_type_2);
+
+    MPI_Cart_shift(grid_comm, 2, 1, &src, &dst);
+    MPI_Sendrecv(block_0.grid.get_data(), 1, face_type_2, src, 0, recvbound.faces[5].data(),
+                 recvbound.faces[5].size(), MPI_DOUBLE, dst, 0, grid_comm, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(block_0.grid.get_data() + block_0.dims[2] - 1, 1, face_type_2, dst, 0,
+                 recvbound.faces[4].data(), recvbound.faces[4].size(), MPI_DOUBLE, src, 0,
+                 grid_comm, MPI_STATUS_IGNORE);
 
 #pragma omp parallel for collapse(3)
     for (int i = 0; i < block_1.dims[0]; ++i) {
@@ -382,21 +330,30 @@ int main(int argc, char **argv) {
 
     // compute approximation
     for (size_t t_step = 2; t_step < K + 1; ++t_step) {
-        for (int axis = 0; axis < 3; ++axis) {
-            MPI_Cart_shift(grid_comm, axis, 1, &src, &dst);
+        // axis 0
+        MPI_Cart_shift(grid_comm, 0, 1, &src, &dst);
+        MPI_Sendrecv(block_1.grid.get_data(), recvbound.faces[1].size(), MPI_DOUBLE, src, 0,
+                     recvbound.faces[1].data(), recvbound.faces[1].size(), MPI_DOUBLE, dst, 0,
+                     grid_comm, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(block_1.grid.get_data() + (block_1.dims[0] - 1) * recvbound.faces[1].size(),
+                     sendbound.faces[1].size(), MPI_DOUBLE, dst, 0, recvbound.faces[0].data(),
+                     recvbound.faces[0].size(), MPI_DOUBLE, src, 0, grid_comm, MPI_STATUS_IGNORE);
 
-            pack_face(block_1, static_cast<AXIS>(axis), true, sendbound.faces[2 * axis]);
-            MPI_Sendrecv(sendbound.faces[2 * axis].data(), sendbound.faces[2 * axis].size(),
-                         MPI_DOUBLE, src, 0, recvbound.faces[2 * axis + 1].data(),
-                         recvbound.faces[2 * axis + 1].size(), MPI_DOUBLE, dst, 0, grid_comm,
-                         MPI_STATUS_IGNORE);
+        // axis 1
+        MPI_Cart_shift(grid_comm, 1, 1, &src, &dst);
+        MPI_Sendrecv(block_1.grid.get_data(), 1, face_type_1, src, 0, recvbound.faces[3].data(),
+                     recvbound.faces[3].size(), MPI_DOUBLE, dst, 0, grid_comm, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(block_1.grid.get_data() + (block_1.dims[1] - 1) * block_1.dims[2], 1,
+                     face_type_1, dst, 0, recvbound.faces[2].data(), recvbound.faces[2].size(),
+                     MPI_DOUBLE, src, 0, grid_comm, MPI_STATUS_IGNORE);
 
-            pack_face(block_1, static_cast<AXIS>(axis), false, sendbound.faces[2 * axis + 1]);
-            MPI_Sendrecv(sendbound.faces[2 * axis + 1].data(), sendbound.faces[2 * axis + 1].size(),
-                         MPI_DOUBLE, dst, 0, recvbound.faces[2 * axis].data(),
-                         recvbound.faces[2 * axis].size(), MPI_DOUBLE, src, 0, grid_comm,
-                         MPI_STATUS_IGNORE);
-        }
+        // axis 2
+        MPI_Cart_shift(grid_comm, 2, 1, &src, &dst);
+        MPI_Sendrecv(block_1.grid.get_data(), 1, face_type_2, src, 0, recvbound.faces[5].data(),
+                     recvbound.faces[5].size(), MPI_DOUBLE, dst, 0, grid_comm, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(block_1.grid.get_data() + block_1.dims[2] - 1, 1, face_type_2, dst, 0,
+                     recvbound.faces[4].data(), recvbound.faces[4].size(), MPI_DOUBLE, src, 0,
+                     grid_comm, MPI_STATUS_IGNORE);
 
 #pragma omp parallel for collapse(3)
         for (int i = 0; i < block_2.dims[0]; ++i) {
