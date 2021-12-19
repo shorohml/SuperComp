@@ -25,14 +25,6 @@ double u(double x, double y, double z, double a_t, double t) {
            cos(a_t * t);
 }
 
-template <typename T> void save_layer(std::vector<T> &layer, std::string path) {
-    std::ofstream fs(path, std::ios::out | std::ios::binary);
-    for (const double &val : layer) {
-        fs.write((char *)&val, sizeof(double));
-    }
-    fs.close();
-}
-
 template <typename T> class Grid3D {
   private:
     std::vector<T> data;
@@ -112,53 +104,6 @@ template <typename T> struct Block3DBound {
     }
 };
 
-enum AXIS { X = 0, Y, Z };
-
-template <typename T>
-void pack_face(Block3D<T> block, AXIS axis, bool first, std::vector<T> &face) {
-    std::size_t face_size;
-    switch (axis) {
-    case AXIS::X:
-        face_size = block.dims[1] * block.dims[2];
-        break;
-    case AXIS::Y:
-        face_size = block.dims[0] * block.dims[2];
-        break;
-    case AXIS::Z:
-        face_size = block.dims[0] * block.dims[1];
-        break;
-    }
-    face.resize(face_size);
-    int face_idx = first ? 0 : block.dims[axis] - 1;
-
-    switch (axis) {
-    case AXIS::X:
-#pragma omp parallel for
-        for (int j = 0; j < block.dims[1]; ++j) {
-            for (int k = 0; k < block.dims[2]; ++k) {
-                face[j * block.dims[2] + k] = block.grid.get(face_idx, j, k);
-            }
-        }
-        break;
-    case AXIS::Y:
-#pragma omp parallel for
-        for (int i = 0; i < block.dims[0]; ++i) {
-            for (int k = 0; k < block.dims[2]; ++k) {
-                face[i * block.dims[2] + k] = block.grid.get(i, face_idx, k);
-            }
-        }
-        break;
-    case AXIS::Z:
-#pragma omp parallel for
-        for (int i = 0; i < block.dims[0]; ++i) {
-            for (int j = 0; j < block.dims[1]; ++j) {
-                face[i * block.dims[1] + j] = block.grid.get(i, j, face_idx);
-            }
-        }
-        break;
-    }
-}
-
 template <typename T> T find_value(Block3D<T> &block, Block3DBound<T> &bound, int i, int j, int k) {
     if (i < 0) {
         return bound.faces[0][j * block.dims[2] + k];
@@ -174,6 +119,91 @@ template <typename T> T find_value(Block3D<T> &block, Block3DBound<T> &bound, in
         return bound.faces[5][i * block.dims[1] + j];
     }
     return block.grid.get(i, j, k);
+}
+
+void save_grid(Grid3D<double> &grid, const std::string &path) {
+    std::ofstream fs(path, std::ios::out | std::ios::binary);
+    for (std::size_t i = 0; i < grid.get_P_x(); ++i) {
+        for (std::size_t j = 0; j < grid.get_P_y(); ++j) {
+            for (std::size_t k = 0; k < grid.get_P_z(); ++k) {
+                fs.write((char *)&grid.get(i, j, k), sizeof(double));
+            }
+        }
+    }
+    fs.close();
+}
+
+void save_layer(Block3D<double> &block, const std::string &path, int rank, int size, int grid_comm, int *dims) {
+    MPI_Request request;
+    MPI_Status status;
+
+    int block_size[3];
+    for (int i = 0; i < 3; ++i) {
+        block_size[i] = (N + 1) / dims[i];
+    }
+    int rem[3];
+    for (int i = 0; i < 3; ++i) {
+        rem[i] = (N + 1) % dims[i];
+    }
+    int smaller_block_start[3];
+    for (int i = 0; i < 3; ++i) {
+        smaller_block_start[i] = rem[i] * (block_size[i] + 1);
+    }
+
+    if (0 != rank) {
+        MPI_Isend(block.grid.get_data(), block.size, MPI_DOUBLE, 0, 0, grid_comm,
+                    &request);
+        MPI_Waitall(1, &request, &status);
+    } else {
+        Grid3D<double> grid(N + 1, N + 1, N + 1);
+
+        for (int i = block.start[0]; i < block.finish[0]; ++i) {
+            for (int j = block.start[1]; j < block.finish[1]; ++j) {
+                for (int k = block.start[2]; k < block.finish[2]; ++k) {
+                    grid.set(i, j, k,
+                                block.grid.get(i - block.start[0], j - block.start[1],
+                                                k - block.start[2]));
+                }
+            }
+        }
+        for (int send_rank = 1; send_rank < size; ++send_rank) {
+            int send_coords[3];
+            MPI_Cart_coords(grid_comm, send_rank, 3, send_coords);
+
+            int block_start[3];
+            int block_finish[3];
+            for (int i = 0; i < 3; ++i) {
+                if (send_coords[i] < rem[i]) {
+                    block_start[i] = send_coords[i] * (block_size[i] + 1);
+                    block_finish[i] = block_start[i] + block_size[i] + 1;
+                } else {
+                    block_start[i] =
+                        smaller_block_start[i] + (send_coords[i] - rem[i]) * block_size[i];
+                    block_finish[i] = block_start[i] + block_size[i];
+                }
+            }
+
+            Block3D<double> send_block(block_start[0], block_start[1], block_start[2],
+                                        block_finish[0], block_finish[1], block_finish[2]);
+
+            MPI_Irecv(send_block.grid.get_data(), send_block.size, MPI_DOUBLE, send_rank, 0,
+                        grid_comm, &request);
+            MPI_Waitall(1, &request, &status);
+
+            for (int i = send_block.start[0]; i < send_block.finish[0]; ++i) {
+                for (int j = send_block.start[1]; j < send_block.finish[1]; ++j) {
+                    for (int k = send_block.start[2]; k < send_block.finish[2]; ++k) {
+                        grid.set(i, j, k,
+                                    send_block.grid.get(i - send_block.start[0],
+                                                        j - send_block.start[1],
+                                                        k - send_block.start[2]));
+                    }
+                }
+            }
+        }
+
+        save_grid(grid, path);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -256,7 +286,6 @@ int main(int argc, char **argv) {
     Block3DBound<double> sendbound(block_0.dims[0], block_0.dims[1], block_0.dims[2]);
     Block3DBound<double> recvbound(block_0.dims[0], block_0.dims[1], block_0.dims[2]);
 
-    // TODO: remove unecessary sends on grid boundary
     int src, dst;
 
     // axis 0
@@ -410,6 +439,11 @@ int main(int argc, char **argv) {
         MPI_Reduce(&max_err, &global_max, 1, MPI_DOUBLE, MPI_MAX, 0, grid_comm);
         if (0 == rank) {
             std::cout << "layer " << t_step << " error: " << global_max << std::endl;
+        }
+
+        if (0 == t_step % 100) {
+            save_layer(block_2, "layer" + std::to_string(t_step) + ".bin", rank, size, grid_comm, dims);
+            save_layer(errs, "errs" + std::to_string(t_step) + ".bin", rank, size, grid_comm, dims);
         }
 
         tmp_block = std::move(block_0);
