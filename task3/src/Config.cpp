@@ -14,7 +14,9 @@ Config::Config(const std::string &path) {
     L[1] = reader.GetReal("Solver", "L_y", 1.0);
     L[2] = reader.GetReal("Solver", "L_z", 1.0);
     T = reader.GetReal("Solver", "T", 0.025);
-    N = reader.GetInteger("Solver", "N", 128);
+    N[0] = reader.GetInteger("Solver", "N_x", 128);
+    N[1] = reader.GetInteger("Solver", "N_y", 128);
+    N[2] = reader.GetInteger("Solver", "N_z", 128);
     K = reader.GetInteger("Solver", "K", 20);
 
     save_layers = reader.GetBoolean("Solver", "save_layers", false);
@@ -31,7 +33,9 @@ void Config::print() const {
     std::cout << "L_y: " << L[1] << std::endl;
     std::cout << "L_z: " << L[2] << std::endl;
     std::cout << "T: " << T << std::endl;
-    std::cout << "N: " << N << std::endl;
+    std::cout << "N_x: " << N[0] << std::endl;
+    std::cout << "N_y: " << N[1] << std::endl;
+    std::cout << "N_z: " << N[2] << std::endl;
     std::cout << "K: " << K << std::endl;
     std::cout << "save_layers: " << save_layers << std::endl;
     std::cout << "save_step: " << save_step << std::endl;

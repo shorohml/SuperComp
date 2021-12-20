@@ -6,11 +6,11 @@ void Solver::compute_block_coords() {
     int rem[3];
     int smaller_block_start[3];
 
-    // (config.N + 1) % dims[i] blocks with size block_size[i] + 1
+    // (config.N[i] + 1) % dims[i] blocks with size block_size[i] + 1
     // other blocks with size block_size[i]
     for (int i = 0; i < 3; ++i) {
-        block_size[i] = (config.N + 1) / dims[i];
-        rem[i] = (config.N + 1) % dims[i];
+        block_size[i] = (config.N[i] + 1) / dims[i];
+        rem[i] = (config.N[i] + 1) % dims[i];
         smaller_block_start[i] = rem[i] * (block_size[i] + 1);
 
         if (coords[i] < rem[i]) {
@@ -25,7 +25,7 @@ void Solver::compute_block_coords() {
 }
 
 Solver::Solver(const std::string &config_path, int argc, char **argv)
-    : config(config_path), u4d(config.L[0], config.L[1], config.L[2]){
+    : config(config_path), u4d(config.L[0], config.L[1], config.L[2]) {
     MPI_Init(&argc, &argv);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -41,8 +41,8 @@ Solver::Solver(const std::string &config_path, int argc, char **argv)
     tau_sq = tau * tau;
     tau_sq_half = tau_sq / 2.0;
     for (int i = 0; i < 3; ++i) {
-        h[i] = config.L[0] / config.N;
-        L_N[i] = config.L[i] / config.N;
+        h[i] = config.L[0] / config.N[i];
+        L_N[i] = config.L[i] / config.N[i];
         h_inv_sq[i] = 1.0 / (h[i] * h[i]);
     }
 
@@ -227,7 +227,7 @@ void Solver::save_layer(Block3D<double> &block, const std::string &path) {
         MPI_Isend(block.grid.data(), block.grid.size(), MPI_DOUBLE, 0, 0, comm, &request);
         MPI_Waitall(1, &request, &status);
     } else {
-        Grid3D<double> grid(config.N + 1, config.N + 1, config.N + 1);
+        Grid3D<double> grid(config.N[0] + 1, config.N[1] + 1, config.N[2] + 1);
 
         // collect grid from blocks
         for (int i = block.start[0]; i < block.finish[0]; ++i) {
@@ -300,13 +300,15 @@ void Solver::run() {
 
         // save layer to disk
         if (config.save_layers && 0 == t % config.save_step) {
-            char N_c_str[50], t_c_str[50];
-            sprintf(N_c_str, "%d", config.N + 1);
+            char N_0_c_str[50], N_1_c_str[50], N_2_c_str[50], t_c_str[50];
+            sprintf(N_0_c_str, "%d", config.N[0] + 1);
+            sprintf(N_1_c_str, "%d", config.N[1] + 1);
+            sprintf(N_2_c_str, "%d", config.N[2] + 1);
             sprintf(t_c_str, "%d", t);
 
-            std::string N_str(N_c_str);
             std::string t_str(t_c_str);
-            std::string grid_dim_str = N_str + "_" + N_str + "_" + N_str;
+            std::string grid_dim_str = std::string(N_0_c_str) + "_" + std::string(N_1_c_str) + "_" +
+                                       std::string(N_2_c_str);
 
             save_layer(blocks[2],
                        config.layers_path + "layer_" + t_str + "_" + grid_dim_str + ".bin");

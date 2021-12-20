@@ -62,10 +62,14 @@ def main():
     config = configparser.ConfigParser()
     config.read(args.path2config)
 
-    grid_res = int(config['Solver']['N']) + 1
+    grid_size = (
+        int(config['Solver']['N_x']) + 1,
+        int(config['Solver']['N_y']) + 1,
+        int(config['Solver']['N_z']) + 1,
+    )
     save_step = int(config['Solver']['save_step'])
     n_steps = int(config['Solver']['K']) // save_step
-    
+
     layers_path = Path(config['Solver']['layers_path'])
     layers_path = args.path2config.parent / layers_path
     imgs_path = layers_path / 'imgs'
@@ -73,20 +77,21 @@ def main():
 
     for i in range(1, n_steps + 1):
         i *= save_step
+        grid_size_str = f'{grid_size[0]}_{grid_size[1]}_{grid_size[2]}'
         render_volume(
-            layers_path / f'layer_{i}_{grid_res}_{grid_res}_{grid_res}.bin',
-            imgs_path / f'layer_{i}_{grid_res}_{grid_res}_{grid_res}.png',
-            (grid_res, grid_res, grid_res)
+            layers_path / f'layer_{i}_{grid_size_str}.bin',
+            imgs_path / f'layer_{i}_{grid_size_str}.png',
+            grid_size,
         )
         render_volume(
-            layers_path / f'errs_{i}_{grid_res}_{grid_res}_{grid_res}.bin',
-            imgs_path / f'errs_{i}_{grid_res}_{grid_res}_{grid_res}.png',
-            (grid_res, grid_res, grid_res)
+            layers_path / f'errs_{i}_{grid_size_str}.bin',
+            imgs_path / f'errs_{i}_{grid_size_str}.png',
+            grid_size,
         )
         render_volume(
-            layers_path / f'analytical_{i}_{grid_res}_{grid_res}_{grid_res}.bin',
-            imgs_path / f'analytical_{i}_{grid_res}_{grid_res}_{grid_res}.png',
-            (grid_res, grid_res, grid_res)
+            layers_path / f'analytical_{i}_{grid_size_str}.bin',
+            imgs_path / f'analytical_{i}_{grid_size_str}.png',
+            grid_size,
         )
 
 
