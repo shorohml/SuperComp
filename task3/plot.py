@@ -55,6 +55,7 @@ def main():
         i *= 100
         render_volume(Path(f'layer{i}.bin'), Path(f'layer{i}.png'))
         render_volume(Path(f'errs{i}.bin'), Path(f'errs{i}.png'))
+        render_volume(Path(f'analytical{i}.bin'), Path(f'analytical{i}.png'))
 
 
 if __name__ == '__main__':

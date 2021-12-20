@@ -7,6 +7,8 @@
 // #define NDEBUG
 #include <cassert>
 
+#define BG
+
 // TODO: write proper argument parser
 const double L_x = 1.0;
 const double L_y = 1.0;
@@ -75,9 +77,15 @@ template <typename T> struct Block3D {
         assert(finish_j >= start_j);
         assert(finish_k >= start_k);
 
-        start = {start_i, start_j, start_k};
-        finish = {finish_i, finish_j, finish_k};
-        dims = {finish_i - start_i, finish_j - start_j, finish_k - start_k};
+        start.push_back(start_i);
+        start.push_back(start_j);
+        start.push_back(start_k);
+        finish.push_back(finish_i);
+        finish.push_back(finish_j);
+        finish.push_back(finish_k);
+        dims.push_back(finish_i - start_i);
+        dims.push_back(finish_j - start_j);
+        dims.push_back(finish_k - start_k);
         size = dims[0] * dims[1] * dims[2];
         grid = Grid3D<T>(dims[0], dims[1], dims[2]);
     }
@@ -86,15 +94,17 @@ template <typename T> struct Block3D {
 template <typename T> struct Block3DBound {
   public:
     std::vector<int> dims;
-    std::vector<std::vector<T>> faces;
+    std::vector<std::vector<T> > faces;
 
     Block3DBound(int dim_0, int dim_1, int dim_2) {
         assert(dim_0 >= 1);
         assert(dim_1 >= 1);
         assert(dim_2 >= 1);
 
-        dims = {dim_0, dim_1, dim_2};
-        faces = std::vector<std::vector<T>>(6);
+        dims.push_back(dim_0);
+        dims.push_back(dim_1);
+        dims.push_back(dim_2);
+        faces = std::vector<std::vector<T> >(6);
         faces[0].resize(dim_1 * dim_2);
         faces[1].resize(dim_1 * dim_2);
         faces[2].resize(dim_0 * dim_2);
@@ -121,6 +131,7 @@ template <typename T> T find_value(Block3D<T> &block, Block3DBound<T> &bound, in
     return block.grid.get(i, j, k);
 }
 
+#ifndef BG
 void save_grid(Grid3D<double> &grid, const std::string &path) {
     std::ofstream fs(path, std::ios::out | std::ios::binary);
     for (std::size_t i = 0; i < grid.get_P_x(); ++i) {
@@ -205,15 +216,16 @@ void save_layer(Block3D<double> &block, const std::string &path, int rank, int s
         save_grid(grid, path);
     }
 }
+#endif
 
 int main(int argc, char **argv) {
-    double a_t = M_PI * sqrt(4 / (L_x * L_x) + 16 / (L_y * L_y) + 36 / (L_z * L_z));
-    double delta, max_err;
     const double tau = T / K;
     const double h_x = L_x / N;
     const double h_y = L_x / N;
     const double h_z = L_x / N;
+    const double a_t = M_PI * sqrt(4 / (L_x * L_x) + 16 / (L_y * L_y) + 36 / (L_z * L_z));
     int size, rank;
+    double delta, max_err;
 
     MPI_Init(&argc, &argv);
 
@@ -224,10 +236,6 @@ int main(int argc, char **argv) {
 
     MPI_Dims_create(size, 3, dims);
 
-    if (0 == rank) {
-        std::cout << std::endl << dims[0] << ' ' << dims[1] << ' ' << dims[2] << std::endl;
-    }
-
     int periods[3] = {true, true, true};
 
     MPI_Comm grid_comm;
@@ -235,8 +243,6 @@ int main(int argc, char **argv) {
 
     int coords[3];
     MPI_Cart_coords(grid_comm, rank, 3, coords);
-
-    std::cout << std::endl << coords[0] << ' ' << coords[1] << ' ' << coords[2] << std::endl;
 
     int block_size[3];
     for (int i = 0; i < 3; ++i) {
@@ -271,9 +277,8 @@ int main(int argc, char **argv) {
                             block_finish[1], block_finish[2]);
     Block3D<double> errs(block_start[0], block_start[1], block_start[2], block_finish[0],
                          block_finish[1], block_finish[2]);
-    Block3D<double> tmp_block;
 
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for
     for (int i = block_0.start[0]; i < block_0.finish[0]; ++i) {
         for (int j = block_0.start[1]; j < block_0.finish[1]; ++j) {
             for (int k = block_0.start[2]; k < block_0.finish[2]; ++k) {
@@ -323,7 +328,7 @@ int main(int argc, char **argv) {
                  recvbound.faces[4].data(), recvbound.faces[4].size(), MPI_DOUBLE, src, 0,
                  grid_comm, MPI_STATUS_IGNORE);
 
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for
     for (int i = 0; i < block_1.dims[0]; ++i) {
         for (int j = 0; j < block_1.dims[1]; ++j) {
             for (int k = 0; k < block_1.dims[2]; ++k) {
@@ -384,7 +389,7 @@ int main(int argc, char **argv) {
                      recvbound.faces[4].data(), recvbound.faces[4].size(), MPI_DOUBLE, src, 0,
                      grid_comm, MPI_STATUS_IGNORE);
 
-#pragma omp parallel for collapse(3)
+#pragma omp parallel for
         for (int i = 0; i < block_2.dims[0]; ++i) {
             for (int j = 0; j < block_2.dims[1]; ++j) {
                 for (int k = 0; k < block_2.dims[2]; ++k) {
@@ -441,15 +446,15 @@ int main(int argc, char **argv) {
             std::cout << "layer " << t_step << " error: " << global_max << std::endl;
         }
 
+        #ifndef BG
         if (0 == t_step % 100) {
             save_layer(block_2, "layer" + std::to_string(t_step) + ".bin", rank, size, grid_comm, dims);
             save_layer(errs, "errs" + std::to_string(t_step) + ".bin", rank, size, grid_comm, dims);
         }
+        #endif
 
-        tmp_block = std::move(block_0);
-        block_0 = std::move(block_1);
-        block_1 = std::move(block_2);
-        block_2 = std::move(tmp_block);
+        std::swap(block_0, block_2);
+        std::swap(block_0, block_1);
     }
     MPI_Finalize();
     return 0;
