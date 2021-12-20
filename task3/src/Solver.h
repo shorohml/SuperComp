@@ -11,8 +11,8 @@ class Solver {
 
     // process and block coordinates
     int size, rank;
-    int dims[3] = {0, 0, 0};
-    int periods[3] = {true, true, true};
+    int dims[3];
+    int periods[3];
     int coords[3];
     MPI_Comm comm;
 

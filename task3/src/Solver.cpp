@@ -25,7 +25,7 @@ void Solver::compute_block_coords() {
 }
 
 Solver::Solver(const std::string &config_path, int argc, char **argv)
-    : config(config_path), u4d(config.L[0], config.L[1], config.L[2]) {
+    : config(config_path), u4d(config.L[0], config.L[1], config.L[2]){
     MPI_Init(&argc, &argv);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -47,6 +47,12 @@ Solver::Solver(const std::string &config_path, int argc, char **argv)
     }
 
     // create cart communicator
+    dims[0] = 0;
+    dims[1] = 0;
+    dims[2] = 0;
+    periods[0] = true;
+    periods[1] = true;
+    periods[2] = true;
     MPI_Dims_create(size, 3, dims);
     MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, true, &comm);
     MPI_Cart_coords(comm, rank, 3, coords);

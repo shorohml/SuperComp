@@ -1,6 +1,7 @@
 #include "Config.h"
 #include "INIReader.h"
 #include <iostream>
+#include <stdexcept>
 
 Config::Config(const std::string &path) {
     INIReader reader(path);
