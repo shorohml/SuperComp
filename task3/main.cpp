@@ -1,14 +1,12 @@
+#include "INIReader.h"
+#include <cassert>
 #include <cmath>
 #include <fstream>
 #include <iostream>
 #include <mpi.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
-// #define NDEBUG
-#include "INIReader.h"
-#include <cassert>
-
-// #define BG
 
 struct Config {
   public:
@@ -98,9 +96,9 @@ template <typename T> struct Block3D {
   public:
     Grid3D<T> grid;
 
-    std::vector<int> start;
-    std::vector<int> finish;
-    std::vector<int> dims;
+    int start[3];
+    int finish[3];
+    int dims[3];
     int size;
 
     Block3D() { Block3D(0, 0, 0, 0, 0, 0); }
@@ -110,15 +108,15 @@ template <typename T> struct Block3D {
         assert(finish_j >= start_j);
         assert(finish_k >= start_k);
 
-        start.push_back(start_i);
-        start.push_back(start_j);
-        start.push_back(start_k);
-        finish.push_back(finish_i);
-        finish.push_back(finish_j);
-        finish.push_back(finish_k);
-        dims.push_back(finish_i - start_i);
-        dims.push_back(finish_j - start_j);
-        dims.push_back(finish_k - start_k);
+        start[0] = start_i;
+        start[1] = start_j;
+        start[2] = start_k;
+        finish[0] = finish_i;
+        finish[1] = finish_j;
+        finish[2] = finish_k;
+        dims[0] = finish_i - start_i;
+        dims[1] = finish_j - start_j;
+        dims[2] = finish_k - start_k;
         size = dims[0] * dims[1] * dims[2];
         grid = Grid3D<T>(dims[0], dims[1], dims[2]);
     }
@@ -126,18 +124,18 @@ template <typename T> struct Block3D {
 
 template <typename T> struct Block3DBound {
   public:
-    std::vector<int> dims;
-    std::vector<std::vector<T>> faces;
+    int dims[3];
+    std::vector<std::vector<T> > faces;
 
     Block3DBound(int dim_0, int dim_1, int dim_2) {
         assert(dim_0 >= 1);
         assert(dim_1 >= 1);
         assert(dim_2 >= 1);
 
-        dims.push_back(dim_0);
-        dims.push_back(dim_1);
-        dims.push_back(dim_2);
-        faces = std::vector<std::vector<T>>(6);
+        dims[0] = dim_0;
+        dims[1] = dim_1;
+        dims[2] = dim_2;
+        faces = std::vector<std::vector<T> >(6);
         faces[0].resize(dim_1 * dim_2);
         faces[1].resize(dim_1 * dim_2);
         faces[2].resize(dim_0 * dim_2);
@@ -164,9 +162,8 @@ template <typename T> T find_value(Block3D<T> &block, Block3DBound<T> &bound, in
     return block.grid.get(i, j, k);
 }
 
-#ifndef BG
 void save_grid(Grid3D<double> &grid, const std::string &path) {
-    std::ofstream fs(path, std::ios::out | std::ios::binary);
+    std::ofstream fs(path.c_str(), std::ios::out | std::ios::binary);
     for (std::size_t i = 0; i < grid.get_P_x(); ++i) {
         for (std::size_t j = 0; j < grid.get_P_y(); ++j) {
             for (std::size_t k = 0; k < grid.get_P_z(); ++k) {
@@ -249,7 +246,6 @@ void save_layer(Block3D<double> &block, const std::string &path, int rank, int s
         save_grid(grid, path);
     }
 }
-#endif
 
 int main(int argc, char **argv) {
     int size, rank;
@@ -412,7 +408,7 @@ int main(int argc, char **argv) {
     }
 
     // compute approximation
-    for (size_t t_step = 2; t_step < config.K + 1; ++t_step) {
+    for (int t_step = 2; t_step < config.K + 1; ++t_step) {
         // axis 0
         MPI_Cart_shift(grid_comm, 0, 1, &src, &dst);
         MPI_Sendrecv(block_1.grid.get_data(), recvbound.faces[1].size(), MPI_DOUBLE, src, 0,
@@ -499,20 +495,21 @@ int main(int argc, char **argv) {
             std::cout << "layer " << t_step << " error: " << global_max << std::endl;
         }
 
-#ifndef BG
+        char c_str_1[50], c_str_2[50];
+        sprintf(c_str_1, "%d", config.N + 1);
+        sprintf(c_str_2, "%d", t_step);
+        std::string str_1(c_str_1);
+        std::string str_2(c_str_2);
+
         if (config.save_layers && 0 == t_step % config.save_step) {
-            std::string grid_dims = std::to_string(config.N + 1) + "_" +
-                                    std::to_string(config.N + 1) + "_" +
-                                    std::to_string(config.N + 1);
-            save_layer(block_2, "layer_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
-                       size, grid_comm, dims, config.N);
-            save_layer(errs, "errs_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
-                       size, grid_comm, dims, config.N);
-            save_layer(analytical,
-                       "analytical_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
-                       size, grid_comm, dims, config.N);
+            std::string grid_dims = str_1 + "_" + str_1 + "_" + str_1;
+            save_layer(block_2, "layer_" + str_2 + "_" + grid_dims + ".bin", rank, size, grid_comm,
+                       dims, config.N);
+            save_layer(errs, "errs_" + str_2 + "_" + grid_dims + ".bin", rank, size, grid_comm,
+                       dims, config.N);
+            save_layer(analytical, "analytical_" + str_2 + "_" + grid_dims + ".bin", rank, size,
+                       grid_comm, dims, config.N);
         }
-#endif
 
         std::swap(block_0, block_2);
         std::swap(block_0, block_1);
