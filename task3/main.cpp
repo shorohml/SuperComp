@@ -7,7 +7,7 @@
 // #define NDEBUG
 #include <cassert>
 
-#define BG
+// #define BG
 
 // TODO: write proper argument parser
 const double L_x = 1.0;
@@ -16,7 +16,7 @@ const double L_z = 1.0;
 const double T = 1.0;
 const size_t N = 128;
 const size_t K = 400;
-const bool SAVE_LAYERS = true;
+const bool SAVE_LAYERS = false;
 const size_t SAVE_STEPS = 100;
 const size_t P_x = 10;
 const size_t P_y = 10;
@@ -144,7 +144,8 @@ void save_grid(Grid3D<double> &grid, const std::string &path) {
     fs.close();
 }
 
-void save_layer(Block3D<double> &block, const std::string &path, int rank, int size, int grid_comm, int *dims) {
+void save_layer(Block3D<double> &block, const std::string &path, int rank, int size, int grid_comm,
+                int *dims) {
     MPI_Request request;
     MPI_Status status;
 
@@ -162,8 +163,7 @@ void save_layer(Block3D<double> &block, const std::string &path, int rank, int s
     }
 
     if (0 != rank) {
-        MPI_Isend(block.grid.get_data(), block.size, MPI_DOUBLE, 0, 0, grid_comm,
-                    &request);
+        MPI_Isend(block.grid.get_data(), block.size, MPI_DOUBLE, 0, 0, grid_comm, &request);
         MPI_Waitall(1, &request, &status);
     } else {
         Grid3D<double> grid(N + 1, N + 1, N + 1);
@@ -171,9 +171,9 @@ void save_layer(Block3D<double> &block, const std::string &path, int rank, int s
         for (int i = block.start[0]; i < block.finish[0]; ++i) {
             for (int j = block.start[1]; j < block.finish[1]; ++j) {
                 for (int k = block.start[2]; k < block.finish[2]; ++k) {
-                    grid.set(i, j, k,
-                                block.grid.get(i - block.start[0], j - block.start[1],
-                                                k - block.start[2]));
+                    grid.set(
+                        i, j, k,
+                        block.grid.get(i - block.start[0], j - block.start[1], k - block.start[2]));
                 }
             }
         }
@@ -195,19 +195,19 @@ void save_layer(Block3D<double> &block, const std::string &path, int rank, int s
             }
 
             Block3D<double> send_block(block_start[0], block_start[1], block_start[2],
-                                        block_finish[0], block_finish[1], block_finish[2]);
+                                       block_finish[0], block_finish[1], block_finish[2]);
 
             MPI_Irecv(send_block.grid.get_data(), send_block.size, MPI_DOUBLE, send_rank, 0,
-                        grid_comm, &request);
+                      grid_comm, &request);
             MPI_Waitall(1, &request, &status);
 
             for (int i = send_block.start[0]; i < send_block.finish[0]; ++i) {
                 for (int j = send_block.start[1]; j < send_block.finish[1]; ++j) {
                     for (int k = send_block.start[2]; k < send_block.finish[2]; ++k) {
                         grid.set(i, j, k,
-                                    send_block.grid.get(i - send_block.start[0],
-                                                        j - send_block.start[1],
-                                                        k - send_block.start[2]));
+                                 send_block.grid.get(i - send_block.start[0],
+                                                     j - send_block.start[1],
+                                                     k - send_block.start[2]));
                     }
                 }
             }
@@ -226,11 +226,14 @@ int main(int argc, char **argv) {
     const double a_t = M_PI * sqrt(4 / (L_x * L_x) + 16 / (L_y * L_y) + 36 / (L_z * L_z));
     int size, rank;
     double delta, max_err;
+    double start, finish, curr_time, max_time;
 
     MPI_Init(&argc, &argv);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    start = MPI_Wtime();
 
     int dims[3] = {0, 0, 0};
 
@@ -277,6 +280,8 @@ int main(int argc, char **argv) {
                             block_finish[1], block_finish[2]);
     Block3D<double> errs(block_start[0], block_start[1], block_start[2], block_finish[0],
                          block_finish[1], block_finish[2]);
+    Block3D<double> analytical(block_start[0], block_start[1], block_start[2], block_finish[0],
+                               block_finish[1], block_finish[2]);
 
 #pragma omp parallel for
     for (int i = block_0.start[0]; i < block_0.finish[0]; ++i) {
@@ -429,9 +434,11 @@ int main(int argc, char **argv) {
         for (int i = 0; i < block_2.dims[0]; ++i) {
             for (int j = 0; j < block_2.dims[1]; ++j) {
                 for (int k = 0; k < block_2.dims[2]; ++k) {
-                    err = fabs(block_2.grid.get(i, j, k) -
-                               u(L_x * (i + block_2.start[0]) / N, L_y * (j + block_2.start[1]) / N,
-                                 L_z * (k + block_2.start[2]) / N, a_t, tau * t_step));
+                    analytical.grid.set(i, j, k,
+                                        u(L_x * (i + block_2.start[0]) / N,
+                                          L_y * (j + block_2.start[1]) / N,
+                                          L_z * (k + block_2.start[2]) / N, a_t, tau * t_step));
+                    err = fabs(block_2.grid.get(i, j, k) - analytical.grid.get(i, j, k));
                     errs.grid.set(i, j, k, err);
                     if (err > max_err) {
                         max_err = err;
@@ -446,16 +453,31 @@ int main(int argc, char **argv) {
             std::cout << "layer " << t_step << " error: " << global_max << std::endl;
         }
 
-        #ifndef BG
-        if (0 == t_step % 100) {
-            save_layer(block_2, "layer" + std::to_string(t_step) + ".bin", rank, size, grid_comm, dims);
-            save_layer(errs, "errs" + std::to_string(t_step) + ".bin", rank, size, grid_comm, dims);
+#ifndef BG
+        if (SAVE_LAYERS && 0 == t_step % SAVE_STEPS) {
+            std::string grid_dims =
+                std::to_string(N + 1) + "_" + std::to_string(N + 1) + "_" + std::to_string(N + 1);
+            save_layer(block_2, "layer_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
+                       size, grid_comm, dims);
+            save_layer(errs, "errs_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
+                       size, grid_comm, dims);
+            save_layer(analytical,
+                       "analytical_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
+                       size, grid_comm, dims);
         }
-        #endif
+#endif
 
         std::swap(block_0, block_2);
         std::swap(block_0, block_1);
     }
+
+    finish = MPI_Wtime();
+    curr_time = finish - start;
+    MPI_Reduce(&curr_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    if (0 == rank) {
+        std::cout << "Execution time: " << max_time << std::endl;
+    }
+
     MPI_Finalize();
     return 0;
 }

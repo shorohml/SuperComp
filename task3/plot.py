@@ -51,11 +51,12 @@ def render_volume(volume_path: Path, img_path: Path):
 
 
 def main():
-    for i in range(1, 5):
-        i *= 100
-        render_volume(Path(f'layer{i}.bin'), Path(f'layer{i}.png'))
-        render_volume(Path(f'errs{i}.bin'), Path(f'errs{i}.png'))
-        render_volume(Path(f'analytical{i}.bin'), Path(f'analytical{i}.png'))
+    for grid_res in (129,):
+        for i in range(1, 5):
+            i *= 100
+            render_volume(Path(f'layer_{i}_{grid_res}_{grid_res}_{grid_res}.bin'), Path(f'layer_{i}_{grid_res}_{grid_res}_{grid_res}.png'))
+            render_volume(Path(f'errs_{i}_{grid_res}_{grid_res}_{grid_res}.bin'), Path(f'errs_{i}_{grid_res}_{grid_res}_{grid_res}.png'))
+            render_volume(Path(f'analytical_{i}_{grid_res}_{grid_res}_{grid_res}.bin'), Path(f'analytical_{i}_{grid_res}_{grid_res}_{grid_res}.png'))
 
 
 if __name__ == '__main__':
