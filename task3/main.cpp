@@ -5,24 +5,57 @@
 #include <string>
 #include <vector>
 // #define NDEBUG
+#include "INIReader.h"
 #include <cassert>
 
 // #define BG
 
-// TODO: write proper argument parser
-const double L_x = 1.0;
-const double L_y = 1.0;
-const double L_z = 1.0;
-const double T = 1.0;
-const size_t N = 128;
-const size_t K = 400;
-const bool SAVE_LAYERS = false;
-const size_t SAVE_STEPS = 100;
-const size_t P_x = 10;
-const size_t P_y = 10;
-const size_t P_z = 10;
+struct Config {
+  public:
+    double L_x;
+    double L_y;
+    double L_z;
+    double T;
+    int N;
+    int K;
+    bool save_layers;
+    int save_step;
 
-double u(double x, double y, double z, double a_t, double t) {
+    Config(const std::string &path);
+
+    void print() const;
+};
+
+Config::Config(const std::string &path) {
+    INIReader reader(path);
+
+    if (0 != reader.ParseError()) {
+        throw std::runtime_error("Can't read config");
+    }
+
+    L_x = reader.GetReal("Solver", "L_x", 1.0);
+    L_y = reader.GetReal("Solver", "L_y", 1.0);
+    L_z = reader.GetReal("Solver", "L_z", 1.0);
+    T = reader.GetReal("Solver", "T", 0.025);
+    N = reader.GetInteger("Solver", "N", 128);
+    K = reader.GetInteger("Solver", "K", 20);
+    save_layers = reader.GetBoolean("Solver", "save_layers", false);
+    save_step = reader.GetInteger("Solver", "save_step", 5);
+}
+
+void Config::print() const {
+    std::cout << "Config:" << std::endl;
+    std::cout << "L_x: " << L_x << std::endl;
+    std::cout << "L_y: " << L_y << std::endl;
+    std::cout << "L_z: " << L_z << std::endl;
+    std::cout << "T: " << T << std::endl;
+    std::cout << "N: " << N << std::endl;
+    std::cout << "K: " << K << std::endl;
+    std::cout << "save_layers: " << save_layers << std::endl;
+    std::cout << "save_step: " << save_step << std::endl << std::endl;
+}
+
+double u(double x, double y, double z, double L_x, double L_y, double L_z, double a_t, double t) {
     return sin(2 * M_PI * x / L_x) * sin(4 * M_PI * y / L_y) * sin(6 * M_PI * z / L_z) *
            cos(a_t * t);
 }
@@ -94,7 +127,7 @@ template <typename T> struct Block3D {
 template <typename T> struct Block3DBound {
   public:
     std::vector<int> dims;
-    std::vector<std::vector<T> > faces;
+    std::vector<std::vector<T>> faces;
 
     Block3DBound(int dim_0, int dim_1, int dim_2) {
         assert(dim_0 >= 1);
@@ -104,7 +137,7 @@ template <typename T> struct Block3DBound {
         dims.push_back(dim_0);
         dims.push_back(dim_1);
         dims.push_back(dim_2);
-        faces = std::vector<std::vector<T> >(6);
+        faces = std::vector<std::vector<T>>(6);
         faces[0].resize(dim_1 * dim_2);
         faces[1].resize(dim_1 * dim_2);
         faces[2].resize(dim_0 * dim_2);
@@ -145,7 +178,7 @@ void save_grid(Grid3D<double> &grid, const std::string &path) {
 }
 
 void save_layer(Block3D<double> &block, const std::string &path, int rank, int size, int grid_comm,
-                int *dims) {
+                int *dims, const int N) {
     MPI_Request request;
     MPI_Status status;
 
@@ -219,19 +252,27 @@ void save_layer(Block3D<double> &block, const std::string &path, int rank, int s
 #endif
 
 int main(int argc, char **argv) {
-    const double tau = T / K;
-    const double h_x = L_x / N;
-    const double h_y = L_x / N;
-    const double h_z = L_x / N;
-    const double a_t = M_PI * sqrt(4 / (L_x * L_x) + 16 / (L_y * L_y) + 36 / (L_z * L_z));
     int size, rank;
     double delta, max_err;
     double start, finish, curr_time, max_time;
+
+    Config config("config.ini");
+
+    const double tau = config.T / config.K;
+    const double h_x = config.L_x / config.N;
+    const double h_y = config.L_y / config.N;
+    const double h_z = config.L_z / config.N;
+    const double a_t = M_PI * sqrt(4 / (config.L_x * config.L_x) + 16 / (config.L_y * config.L_y) +
+                                   36 / (config.L_z * config.L_z));
 
     MPI_Init(&argc, &argv);
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    if (0 == rank) {
+        config.print();
+    }
 
     start = MPI_Wtime();
 
@@ -249,11 +290,11 @@ int main(int argc, char **argv) {
 
     int block_size[3];
     for (int i = 0; i < 3; ++i) {
-        block_size[i] = (N + 1) / dims[i];
+        block_size[i] = (config.N + 1) / dims[i];
     }
     int rem[3];
     for (int i = 0; i < 3; ++i) {
-        rem[i] = (N + 1) % dims[i];
+        rem[i] = (config.N + 1) % dims[i];
     }
     int smaller_block_start[3];
     for (int i = 0; i < 3; ++i) {
@@ -288,7 +329,9 @@ int main(int argc, char **argv) {
         for (int j = block_0.start[1]; j < block_0.finish[1]; ++j) {
             for (int k = block_0.start[2]; k < block_0.finish[2]; ++k) {
                 block_0.grid.set(i - block_0.start[0], j - block_0.start[1], k - block_0.start[2],
-                                 u(L_x * i / N, L_y * j / N, L_z * k / N, a_t, 0.0));
+                                 u(config.L_x * i / config.N, config.L_y * j / config.N,
+                                   config.L_z * k / config.N, config.L_x, config.L_y, config.L_z,
+                                   a_t, 0.0));
             }
         }
     }
@@ -343,9 +386,10 @@ int main(int argc, char **argv) {
                     (dims[1] - 1 == coords[1] && block_1.dims[1] - 1 == j) ||
                     (dims[2] - 1 == coords[2] && block_1.dims[2] - 1 == k)) {
                     block_1.grid.set(i, j, k,
-                                     u(L_x * (i + block_1.start[0]) / N,
-                                       L_y * (j + block_1.start[1]) / N,
-                                       L_z * (k + block_1.start[2]) / N, a_t, tau));
+                                     u(config.L_x * (i + block_1.start[0]) / config.N,
+                                       config.L_y * (j + block_1.start[1]) / config.N,
+                                       config.L_z * (k + block_1.start[2]) / config.N, config.L_x,
+                                       config.L_y, config.L_z, a_t, tau));
                 } else {
                     delta = 0.0;
                     delta += (find_value(block_0, recvbound, i - 1, j, k) -
@@ -368,7 +412,7 @@ int main(int argc, char **argv) {
     }
 
     // compute approximation
-    for (size_t t_step = 2; t_step < K + 1; ++t_step) {
+    for (size_t t_step = 2; t_step < config.K + 1; ++t_step) {
         // axis 0
         MPI_Cart_shift(grid_comm, 0, 1, &src, &dst);
         MPI_Sendrecv(block_1.grid.get_data(), recvbound.faces[1].size(), MPI_DOUBLE, src, 0,
@@ -404,9 +448,10 @@ int main(int argc, char **argv) {
                         (dims[1] - 1 == coords[1] && block_1.dims[1] - 1 == j) ||
                         (dims[2] - 1 == coords[2] && block_1.dims[2] - 1 == k)) {
                         block_2.grid.set(i, j, k,
-                                         u(L_x * (i + block_2.start[0]) / N,
-                                           L_y * (j + block_2.start[1]) / N,
-                                           L_z * (k + block_2.start[2]) / N, a_t, tau * t_step));
+                                         u(config.L_x * (i + block_2.start[0]) / config.N,
+                                           config.L_y * (j + block_2.start[1]) / config.N,
+                                           config.L_z * (k + block_2.start[2]) / config.N,
+                                           config.L_x, config.L_y, config.L_z, a_t, tau * t_step));
                     } else {
                         delta = 0.0;
                         delta += (find_value(block_1, recvbound, i - 1, j, k) -
@@ -435,9 +480,10 @@ int main(int argc, char **argv) {
             for (int j = 0; j < block_2.dims[1]; ++j) {
                 for (int k = 0; k < block_2.dims[2]; ++k) {
                     analytical.grid.set(i, j, k,
-                                        u(L_x * (i + block_2.start[0]) / N,
-                                          L_y * (j + block_2.start[1]) / N,
-                                          L_z * (k + block_2.start[2]) / N, a_t, tau * t_step));
+                                        u(config.L_x * (i + block_2.start[0]) / config.N,
+                                          config.L_y * (j + block_2.start[1]) / config.N,
+                                          config.L_z * (k + block_2.start[2]) / config.N,
+                                          config.L_x, config.L_y, config.L_z, a_t, tau * t_step));
                     err = fabs(block_2.grid.get(i, j, k) - analytical.grid.get(i, j, k));
                     errs.grid.set(i, j, k, err);
                     if (err > max_err) {
@@ -454,16 +500,17 @@ int main(int argc, char **argv) {
         }
 
 #ifndef BG
-        if (SAVE_LAYERS && 0 == t_step % SAVE_STEPS) {
-            std::string grid_dims =
-                std::to_string(N + 1) + "_" + std::to_string(N + 1) + "_" + std::to_string(N + 1);
+        if (config.save_layers && 0 == t_step % config.save_step) {
+            std::string grid_dims = std::to_string(config.N + 1) + "_" +
+                                    std::to_string(config.N + 1) + "_" +
+                                    std::to_string(config.N + 1);
             save_layer(block_2, "layer_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
-                       size, grid_comm, dims);
+                       size, grid_comm, dims, config.N);
             save_layer(errs, "errs_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
-                       size, grid_comm, dims);
+                       size, grid_comm, dims, config.N);
             save_layer(analytical,
                        "analytical_" + std::to_string(t_step) + "_" + grid_dims + ".bin", rank,
-                       size, grid_comm, dims);
+                       size, grid_comm, dims, config.N);
         }
 #endif
 
