@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vector>
 #include <fstream>
 #include <string>
+#include <vector>
 
 template <typename T> class Grid3D {
   private:
@@ -15,13 +15,7 @@ template <typename T> class Grid3D {
   public:
     Grid3D() : _P_x(0), _P_y(0), _P_z(0), _size(0) {}
 
-    Grid3D(int P_x, int P_y, int P_z) {
-        _P_x = P_x;
-        _P_y = P_y;
-        _P_z = P_z;
-        _size = P_x * P_y * P_z;
-        _buffer.resize(_size);
-    }
+    Grid3D(int P_x, int P_y, int P_z) { resize(P_x, P_y, P_z); }
 
     T *data() { return _buffer.data(); }
 
@@ -34,16 +28,8 @@ template <typename T> class Grid3D {
     int P_z() { return _P_z; }
 
     int size() { return _size; }
+
+    void resize(int P_x, int P_y, int P_z);
 };
 
-void save_grid(Grid3D<double> &grid, const std::string &path) {
-    std::ofstream fs(path.c_str(), std::ios::out | std::ios::binary);
-    for (int i = 0; i < grid.P_x(); ++i) {
-        for (int j = 0; j < grid.P_y(); ++j) {
-            for (int k = 0; k < grid.P_z(); ++k) {
-                fs.write((char *)&grid(i, j, k), sizeof(double));
-            }
-        }
-    }
-    fs.close();
-}
+void save_grid(Grid3D<double> &grid, const std::string &path);
