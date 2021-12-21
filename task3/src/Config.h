@@ -7,6 +7,7 @@ struct Config {
     double L[3];
     double T;
     int N[3];
+    int periodic[3];
     int K;
     bool save_layers;
     int save_step;

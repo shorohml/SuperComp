@@ -17,6 +17,9 @@ Config::Config(const std::string &path) {
     N[0] = reader.GetInteger("Solver", "N_x", 128);
     N[1] = reader.GetInteger("Solver", "N_y", 128);
     N[2] = reader.GetInteger("Solver", "N_z", 128);
+    periodic[0] = reader.GetBoolean("Solver", "periodic_x", true);
+    periodic[1] = reader.GetBoolean("Solver", "periodic_y", true);
+    periodic[2] = reader.GetBoolean("Solver", "periodic_z", true);
     K = reader.GetInteger("Solver", "K", 20);
 
     save_layers = reader.GetBoolean("Solver", "save_layers", false);
@@ -36,6 +39,14 @@ void Config::print() const {
     std::cout << "N_x: " << N[0] << std::endl;
     std::cout << "N_y: " << N[1] << std::endl;
     std::cout << "N_z: " << N[2] << std::endl;
+    for (int i = 0; i < 3; ++i) {
+        std::cout << "Boundary condition on axis " << i;
+        if (periodic[i]) {
+            std::cout << " - periodic" << std::endl; 
+        } else {
+            std::cout << " - type 0" << std::endl; 
+        }
+    }
     std::cout << "K: " << K << std::endl;
     std::cout << "save_layers: " << save_layers << std::endl;
     std::cout << "save_step: " << save_step << std::endl;

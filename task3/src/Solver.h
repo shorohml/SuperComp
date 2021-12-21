@@ -12,8 +12,9 @@ class Solver {
     // process and block coordinates
     int size, rank;
     int dims[3];
-    int periods[3];
     int coords[3];
+    bool is_first_block[3];
+    bool is_last_block[3];
     MPI_Comm comm;
 
     // grid blocks
@@ -48,10 +49,18 @@ class Solver {
 
     double laplacian(Block3D<double> &block, int i, int j, int k);
 
+    void compute_boundary_0(Block3D<double> &block, bool force_analytical, int i, int t);
+
+    void compute_boundary_1(Block3D<double> &block, bool force_analytical, int j, int t);
+
+    void compute_boundary_2(Block3D<double> &block, bool force_analytical, int k, int t);
+
+    void compute_boundary(Block3D<double> &block, bool force_analytical, int t);
+
     void compute_layer_1(Block3D<double> &block_0, Block3D<double> &block_1);
 
     void compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
-                         Block3D<double> &block_2);
+                         Block3D<double> &block_2, int t);
 
     double compute_max_err(Block3D<double> &block, double t);
 

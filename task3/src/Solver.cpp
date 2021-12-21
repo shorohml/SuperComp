@@ -50,12 +50,13 @@ Solver::Solver(const std::string &config_path, int argc, char **argv)
     dims[0] = 0;
     dims[1] = 0;
     dims[2] = 0;
-    periods[0] = true;
-    periods[1] = true;
-    periods[2] = true;
     MPI_Dims_create(size, 3, dims);
-    MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, true, &comm);
+    MPI_Cart_create(MPI_COMM_WORLD, 3, dims, config.periodic, true, &comm);
     MPI_Cart_coords(comm, rank, 3, coords);
+    for (int i = 0; i < 3; ++i) {
+        is_first_block[i] = coords[i] == 0;
+        is_last_block[i] = coords[i] == dims[i] - 1;
+    }
 
     compute_block_coords();
     for (int i = 0; i < 3; ++i) {
@@ -153,49 +154,107 @@ double Solver::laplacian(Block3D<double> &block, int i, int j, int k) {
     return delta;
 }
 
-void Solver::compute_layer_1(Block3D<double> &block_0, Block3D<double> &block_1) {
+void Solver::compute_boundary_0(Block3D<double> &block, bool force_analytical, int i, int t) {
 #pragma omp parallel for
-    for (int i = 0; i < block_1.dims[0]; ++i) {
-        for (int j = 0; j < block_1.dims[1]; ++j) {
-            for (int k = 0; k < block_1.dims[2]; ++k) {
-                if ((0 == coords[0] && 0 == i) || (0 == coords[1] && 0 == j) ||
-                    (0 == coords[2] && 0 == k) ||
-                    (dims[0] - 1 == coords[0] && block_1.dims[0] - 1 == i) ||
-                    (dims[1] - 1 == coords[1] && block_1.dims[1] - 1 == j) ||
-                    (dims[2] - 1 == coords[2] && block_1.dims[2] - 1 == k)) {
-                    block_1.grid(i, j, k) =
-                        u4d(L_N[0] * (i + block_1.start[0]), L_N[1] * (j + block_1.start[1]),
-                            L_N[2] * (k + block_1.start[2]), tau);
-                } else {
-                    block_1.grid(i, j, k) =
-                        block_0.grid(i, j, k) + tau_sq_half * laplacian(block_0, i, j, k);
-                }
+    for (int j = 0; j < block.dims[1]; ++j) {
+        for (int k = 0; k < block.dims[2]; ++k) {
+            if (!force_analytical && !config.periodic[0]) {
+                block.grid(i, j, k) = 0.0;
+            } else {
+                block.grid(i, j, k) =
+                    u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
+                        L_N[2] * (k + block.start[2]), tau * t);
             }
         }
     }
 }
 
-void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
-                             Block3D<double> &block_2) {
+void Solver::compute_boundary_1(Block3D<double> &block, bool force_analytical, int j, int t) {
 #pragma omp parallel for
-    for (int i = 0; i < block_2.dims[0]; ++i) {
-        for (int j = 0; j < block_2.dims[1]; ++j) {
-            for (int k = 0; k < block_2.dims[2]; ++k) {
-                if ((0 == coords[0] && 0 == i) || (0 == coords[1] && 0 == j) ||
-                    (0 == coords[2] && 0 == k) ||
-                    (dims[0] - 1 == coords[0] && block_2.dims[0] - 1 == i) ||
-                    (dims[1] - 1 == coords[1] && block_2.dims[1] - 1 == j) ||
-                    (dims[2] - 1 == coords[2] && block_2.dims[2] - 1 == k)) {
-                    block_1.grid(i, j, k) =
-                        u4d(L_N[0] * (i + block_1.start[0]), L_N[1] * (j + block_1.start[1]),
-                            L_N[2] * (k + block_1.start[2]), tau);
-                } else {
-                    block_2.grid(i, j, k) = 2 * block_1.grid(i, j, k) - block_0.grid(i, j, k) +
-                                            tau_sq * laplacian(block_1, i, j, k);
-                }
+    for (int i = 0; i < block.dims[0]; ++i) {
+        for (int k = 0; k < block.dims[2]; ++k) {
+            if (!force_analytical && !config.periodic[1]) {
+                block.grid(i, j, k) = 0.0;
+            } else {
+                block.grid(i, j, k) =
+                    u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
+                        L_N[2] * (k + block.start[2]), tau * t);
             }
         }
     }
+}
+
+void Solver::compute_boundary_2(Block3D<double> &block, bool force_analytical, int k, int t) {
+#pragma omp parallel for
+    for (int i = 0; i < block.dims[0]; ++i) {
+        for (int j = 0; j < block.dims[1]; ++j) {
+            if (!force_analytical && !config.periodic[2]) {
+                block.grid(i, j, k) = 0.0;
+            } else {
+                block.grid(i, j, k) =
+                    u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
+                        L_N[2] * (k + block.start[2]), tau * t);
+            }
+        }
+    }
+}
+
+void Solver::compute_boundary(Block3D<double> &block, bool force_analytical, int t) {
+    if (is_first_block[0]) {
+        compute_boundary_0(block, force_analytical, 0, t);
+    }
+    if (is_last_block[0]) {
+        compute_boundary_0(block, force_analytical, block.dims[0] - 1, t);
+    }
+    if (is_first_block[1]) {
+        compute_boundary_1(block, force_analytical, 0, t);
+    }
+    if (is_last_block[1]) {
+        compute_boundary_1(block, force_analytical, block.dims[1] - 1, t);
+    }
+    if (is_first_block[2]) {
+        compute_boundary_2(block, force_analytical, 0, t);
+    }
+    if (is_last_block[2]) {
+        compute_boundary_2(block, force_analytical, block.dims[2] - 1, t);
+    }
+}
+
+void Solver::compute_layer_1(Block3D<double> &block_0, Block3D<double> &block_1) {
+    int start[3], finish[3];
+    for (int i = 0; i < 3; ++i) {
+        start[i] = is_first_block[i] ? 1 : 0;
+        finish[i] = is_last_block[i] ? block_1.dims[i] - 1 : block_1.dims[i];
+    }
+#pragma omp parallel for
+    for (int i = start[0]; i < finish[0]; ++i) {
+        for (int j = start[1]; j < finish[1]; ++j) {
+            for (int k = start[2]; k < finish[2]; ++k) {
+                block_1.grid(i, j, k) =
+                    block_0.grid(i, j, k) + tau_sq_half * laplacian(block_0, i, j, k);
+            }
+        }
+    }
+    compute_boundary(block_1, true, 1);
+}
+
+void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
+                             Block3D<double> &block_2, int t) {
+    int start[3], finish[3];
+    for (int i = 0; i < 3; ++i) {
+        start[i] = is_first_block[i] ? 1 : 0;
+        finish[i] = is_last_block[i] ? block_2.dims[i] - 1 : block_2.dims[i];
+    }
+#pragma omp parallel for
+    for (int i = start[0]; i < finish[0]; ++i) {
+        for (int j = start[1]; j < finish[1]; ++j) {
+            for (int k = start[2]; k < finish[2]; ++k) {
+                block_2.grid(i, j, k) = 2 * block_1.grid(i, j, k) - block_0.grid(i, j, k) +
+                                        tau_sq * laplacian(block_1, i, j, k);
+            }
+        }
+    }
+    compute_boundary(block_2, false, t);
 }
 
 double Solver::compute_max_err(Block3D<double> &block, double t) {
@@ -262,7 +321,7 @@ void Solver::save_layer(Block3D<double> &block, const std::string &path) {
         MPI_Cart_coords(comm, 0, 3, coords);
         compute_block_coords();
 
-        // save cllected grid
+        // save collected grid
         save_grid(grid, path);
     }
 }
@@ -286,7 +345,7 @@ void Solver::run() {
     // layers 2...K
     for (int t = 2; t < config.K + 1; ++t) {
         send_data(blocks[1]);
-        compute_layer_2(blocks[0], blocks[1], blocks[2]);
+        compute_layer_2(blocks[0], blocks[1], blocks[2], t);
 
         // compute err
         block_max_err = compute_max_err(blocks[2], t);
@@ -317,7 +376,7 @@ void Solver::run() {
                        config.layers_path + "analytical_" + t_str + "_" + grid_dim_str + ".bin");
         }
 
-        // change blocks (2 -> 1, 1 -> 0)
+        // move blocks (2 -> 1, 1 -> 0)
         std::swap(blocks[0], blocks[2]);
         std::swap(blocks[0], blocks[1]);
     }
