@@ -43,11 +43,16 @@ class Solver {
 
     void compute_layer_0(Block3D<double> &block);
 
-    void send_data(Block3D<double> &block);
+    void send_inner_values(Block3D<double> &block);
+
+    void send_boundary_values(Block3D<double> &block);
 
     double find_value(Block3D<double> &block, Block3DBound<double> &bound, int i, int j, int k);
 
     double laplacian(Block3D<double> &block, int i, int j, int k);
+
+    inline double get_boundary_val(Block3D<double> &block, int i, int j, int k, int t,
+                            bool force_analytical, int axis);
 
     void compute_boundary_0(Block3D<double> &block, bool force_analytical, int i, int t);
 

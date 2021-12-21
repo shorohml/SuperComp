@@ -3,7 +3,7 @@ GENERATES = main
 TRASH = layers
 
 CXX =  mpicxx.mpich
-CXXFLAGS = -O2
+CXXFLAGS = -O3
 
 INCLUDE  = -Isrc/
 SRC = \

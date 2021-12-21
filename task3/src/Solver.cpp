@@ -110,7 +110,7 @@ void whait_all(std::vector<bool> &send_recv, std::vector<MPI_Request> &requests,
 }
 } // namespace
 
-void Solver::send_data(Block3D<double> &block) {
+void Solver::send_inner_values(Block3D<double> &block) {
     std::vector<bool> send_recv(2);
     std::vector<MPI_Request> requests(2);
     std::vector<MPI_Status> statuses(2);
@@ -121,11 +121,12 @@ void Solver::send_data(Block3D<double> &block) {
 
     // <- [...] <-
     set(send_recv, false);
-    if (is_first_block[0] && config.periodic[0] || !is_first_block[0]) {
+    if (!is_first_block[0]) {
+        // send u_0jk
         MPI_Isend(block.grid.data(), bound.faces[1].size(), MPI_DOUBLE, src, 0, comm, &requests[0]);
         send_recv[0] = true;
     }
-    if (is_last_block[0] && config.periodic[0] || !is_last_block[0]) {
+    if (!is_last_block[0]) {
         MPI_Irecv(bound.faces[1].data(), bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm,
                   &requests[1]);
         send_recv[1] = true;
@@ -134,12 +135,13 @@ void Solver::send_data(Block3D<double> &block) {
 
     // -> [...] ->
     set(send_recv, false);
-    if (is_last_block[0] && config.periodic[0] || !is_last_block[0]) {
+    if (!is_last_block[0]) {
+        // send u_Njk
         MPI_Isend(block.grid.data() + (block.dims[0] - 1) * bound.faces[1].size(),
                   bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm, &requests[0]);
         send_recv[0] = true;
     }
-    if (is_first_block[0] && config.periodic[0] || !is_first_block[0]) {
+    if (!is_first_block[0]) {
         MPI_Irecv(bound.faces[0].data(), bound.faces[0].size(), MPI_DOUBLE, src, 0, comm,
                   &requests[1]);
         send_recv[1] = true;
@@ -151,11 +153,12 @@ void Solver::send_data(Block3D<double> &block) {
 
     // <- [...] <-
     set(send_recv, false);
-    if (is_first_block[1] && config.periodic[1] || !is_first_block[1]) {
+    if (!is_first_block[1]) {
+        // send u_i0k
         MPI_Isend(block.grid.data(), 1, face_type_1, src, 0, comm, &requests[0]);
         send_recv[0] = true;
     }
-    if (is_last_block[1] && config.periodic[1] || !is_last_block[1]) {
+    if (!is_last_block[1]) {
         MPI_Irecv(bound.faces[3].data(), bound.faces[3].size(), MPI_DOUBLE, dst, 0, comm,
                   &requests[1]);
         send_recv[1] = true;
@@ -164,12 +167,13 @@ void Solver::send_data(Block3D<double> &block) {
 
     // -> [...] ->
     set(send_recv, false);
-    if (is_last_block[1] && config.periodic[1] || !is_last_block[1]) {
+    if (!is_last_block[1]) {
+        // send u_iNk
         MPI_Isend(block.grid.data() + (block.dims[1] - 1) * block.dims[2], 1, face_type_1, dst, 0,
                   comm, &requests[0]);
         send_recv[0] = true;
     }
-    if (is_first_block[1] && config.periodic[1] || !is_first_block[1]) {
+    if (!is_first_block[1]) {
         MPI_Irecv(bound.faces[2].data(), bound.faces[2].size(), MPI_DOUBLE, src, 0, comm,
                   &requests[1]);
         send_recv[1] = true;
@@ -181,11 +185,12 @@ void Solver::send_data(Block3D<double> &block) {
 
     // <- [...] <-
     set(send_recv, false);
-    if (is_first_block[2] && config.periodic[2] || !is_first_block[2]) {
+    if (!is_first_block[2]) {
+        // send u_ij0
         MPI_Isend(block.grid.data(), 1, face_type_2, src, 0, comm, &requests[0]);
         send_recv[0] = true;
     }
-    if (is_last_block[2] && config.periodic[2] || !is_last_block[2]) {
+    if (!is_last_block[2]) {
         MPI_Irecv(bound.faces[5].data(), bound.faces[5].size(), MPI_DOUBLE, dst, 0, comm,
                   &requests[1]);
         send_recv[1] = true;
@@ -194,12 +199,117 @@ void Solver::send_data(Block3D<double> &block) {
 
     // -> [...] ->
     set(send_recv, false);
-    if (is_last_block[2] && config.periodic[2] || !is_last_block[2]) {
-        MPI_Isend(block.grid.data() + block.dims[2] - 1, 1, face_type_2, dst, 0,
+    if (!is_last_block[2]) {
+        // send u_ijN
+        MPI_Isend(block.grid.data() + block.dims[2] - 1, 1, face_type_2, dst, 0, comm,
+                  &requests[0]);
+        send_recv[0] = true;
+    }
+    if (!is_first_block[2]) {
+        MPI_Irecv(bound.faces[4].data(), bound.faces[4].size(), MPI_DOUBLE, src, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+}
+
+void Solver::send_boundary_values(Block3D<double> &block) {
+    std::vector<bool> send_recv(2);
+    std::vector<MPI_Request> requests(2);
+    std::vector<MPI_Status> statuses(2);
+    int src, dst;
+
+    // axis 0
+    MPI_Cart_shift(comm, 0, 1, &src, &dst);
+
+    // <- [...] <-
+    set(send_recv, false);
+    if (is_first_block[0] && config.periodic[0]) {
+        // send u_1jk
+        MPI_Isend(block.grid.data() + bound.faces[1].size(), bound.faces[1].size(), MPI_DOUBLE, src,
+                  0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_last_block[0] && config.periodic[0]) {
+        MPI_Irecv(bound.faces[1].data(), bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // -> [...] ->
+    set(send_recv, false);
+    if (is_last_block[0] && config.periodic[0]) {
+        // send u_(N - 1)jk
+        MPI_Isend(block.grid.data() + (block.dims[0] - 2) * bound.faces[1].size(),
+                  bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_first_block[0] && config.periodic[0]) {
+        MPI_Irecv(bound.faces[0].data(), bound.faces[0].size(), MPI_DOUBLE, src, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // axis 1
+    MPI_Cart_shift(comm, 1, 1, &src, &dst);
+
+    // <- [...] <-
+    set(send_recv, false);
+    if (is_first_block[1] && config.periodic[1]) {
+        // send u_i1k
+        MPI_Isend(block.grid.data() + block.dims[2], 1, face_type_1, src, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_last_block[1] && config.periodic[1]) {
+        MPI_Irecv(bound.faces[3].data(), bound.faces[3].size(), MPI_DOUBLE, dst, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // -> [...] ->
+    set(send_recv, false);
+    if (is_last_block[1] && config.periodic[1]) {
+        // send u_i(N - 1)k
+        MPI_Isend(block.grid.data() + (block.dims[1] - 2) * block.dims[2], 1, face_type_1, dst, 0,
                   comm, &requests[0]);
         send_recv[0] = true;
     }
-    if (is_first_block[2] && config.periodic[2] || !is_first_block[2]) {
+    if (is_first_block[1] && config.periodic[1]) {
+        MPI_Irecv(bound.faces[2].data(), bound.faces[2].size(), MPI_DOUBLE, src, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // axis 2
+    MPI_Cart_shift(comm, 2, 1, &src, &dst);
+
+    // <- [...] <-
+    set(send_recv, false);
+    if (is_first_block[2] && config.periodic[2]) {
+        // send u_ij1
+        MPI_Isend(block.grid.data() + 1, 1, face_type_2, src, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_last_block[2] && config.periodic[2]) {
+        MPI_Irecv(bound.faces[5].data(), bound.faces[5].size(), MPI_DOUBLE, dst, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // -> [...] ->
+    set(send_recv, false);
+    if (is_last_block[2] && config.periodic[2]) {
+        // send u_ij(N - 1)
+        MPI_Isend(block.grid.data() + block.dims[2] - 2, 1, face_type_2, dst, 0, comm,
+                  &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_first_block[2] && config.periodic[2]) {
         MPI_Irecv(bound.faces[4].data(), bound.faces[4].size(), MPI_DOUBLE, src, 0, comm,
                   &requests[1]);
         send_recv[1] = true;
@@ -239,17 +349,34 @@ double Solver::laplacian(Block3D<double> &block, int i, int j, int k) {
     return delta;
 }
 
+inline double Solver::get_boundary_val(Block3D<double> &block, int i, int j, int k, int t,
+                                       bool force_analytical, int axis) {
+    if (force_analytical) {
+        return u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
+                   L_N[2] * (k + block.start[2]), tau * t);
+    } else if (!config.periodic[axis]) {
+        return 0.0;
+    } else {
+        switch (axis) {
+        case 0:
+            return (find_value(block, bound, i - 1, j, k) + find_value(block, bound, i + 1, j, k)) /
+                   2.0;
+        case 1:
+            return (find_value(block, bound, i, j - 1, k) + find_value(block, bound, i, j + 1, k)) /
+                   2.0;
+        case 2:
+            return (find_value(block, bound, i, j, k - 1) + find_value(block, bound, i, j, k + 1)) /
+                   2.0;
+        }
+    }
+    return 0.0;
+}
+
 void Solver::compute_boundary_0(Block3D<double> &block, bool force_analytical, int i, int t) {
 #pragma omp parallel for
     for (int j = 0; j < block.dims[1]; ++j) {
         for (int k = 0; k < block.dims[2]; ++k) {
-            if (!force_analytical && !config.periodic[0]) {
-                block.grid(i, j, k) = 0.0;
-            } else {
-                block.grid(i, j, k) =
-                    u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
-                        L_N[2] * (k + block.start[2]), tau * t);
-            }
+            block.grid(i, j, k) = get_boundary_val(block, i, j, k, t, force_analytical, 0);
         }
     }
 }
@@ -258,13 +385,7 @@ void Solver::compute_boundary_1(Block3D<double> &block, bool force_analytical, i
 #pragma omp parallel for
     for (int i = 0; i < block.dims[0]; ++i) {
         for (int k = 0; k < block.dims[2]; ++k) {
-            if (!force_analytical && !config.periodic[1]) {
-                block.grid(i, j, k) = 0.0;
-            } else {
-                block.grid(i, j, k) =
-                    u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
-                        L_N[2] * (k + block.start[2]), tau * t);
-            }
+            block.grid(i, j, k) = get_boundary_val(block, i, j, k, t, force_analytical, 1);
         }
     }
 }
@@ -273,13 +394,7 @@ void Solver::compute_boundary_2(Block3D<double> &block, bool force_analytical, i
 #pragma omp parallel for
     for (int i = 0; i < block.dims[0]; ++i) {
         for (int j = 0; j < block.dims[1]; ++j) {
-            if (!force_analytical && !config.periodic[2]) {
-                block.grid(i, j, k) = 0.0;
-            } else {
-                block.grid(i, j, k) =
-                    u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
-                        L_N[2] * (k + block.start[2]), tau * t);
-            }
+            block.grid(i, j, k) = get_boundary_val(block, i, j, k, t, force_analytical, 2);
         }
     }
 }
@@ -306,6 +421,8 @@ void Solver::compute_boundary(Block3D<double> &block, bool force_analytical, int
 }
 
 void Solver::compute_layer_1(Block3D<double> &block_0, Block3D<double> &block_1) {
+    send_inner_values(block_0);
+
     int start[3], finish[3];
     for (int i = 0; i < 3; ++i) {
         start[i] = is_first_block[i] ? 1 : 0;
@@ -321,11 +438,14 @@ void Solver::compute_layer_1(Block3D<double> &block_0, Block3D<double> &block_1)
             }
         }
     }
+
     compute_boundary(block_1, true, 1);
 }
 
 void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
                              Block3D<double> &block_2, int t) {
+    send_inner_values(block_1);
+
     int start[3], finish[3];
     for (int i = 0; i < 3; ++i) {
         start[i] = is_first_block[i] ? 1 : 0;
@@ -341,6 +461,8 @@ void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
             }
         }
     }
+
+    send_boundary_values(block_2);
     compute_boundary(block_2, false, t);
 }
 
@@ -420,7 +542,6 @@ void Solver::run() {
     compute_layer_0(blocks[0]);
 
     // layer 1
-    send_data(blocks[0]);
     compute_layer_1(blocks[0], blocks[1]);
 
     block_max_err = compute_max_err(blocks[1], 1);
@@ -431,7 +552,6 @@ void Solver::run() {
 
     // layers 2...K
     for (int t = 2; t < config.K + 1; ++t) {
-        send_data(blocks[1]);
         compute_layer_2(blocks[0], blocks[1], blocks[2], t);
 
         // compute err
