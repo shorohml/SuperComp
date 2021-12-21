@@ -22,6 +22,7 @@ Config::Config(const std::string &path) {
     periodic[2] = reader.GetBoolean("Solver", "periodic_z", true);
     K = reader.GetInteger("Solver", "K", 20);
 
+    print_layer_err = reader.GetBoolean("Solver", "print_layer_err", false);
     save_layers = reader.GetBoolean("Solver", "save_layers", false);
     save_step = reader.GetInteger("Solver", "save_step", 5);
     layers_path = reader.Get("Solver", "layers_path", "./layers");

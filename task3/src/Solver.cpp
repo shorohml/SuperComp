@@ -226,6 +226,7 @@ void Solver::compute_layer_1(Block3D<double> &block_0, Block3D<double> &block_1)
         start[i] = is_first_block[i] ? 1 : 0;
         finish[i] = is_last_block[i] ? block_1.dims[i] - 1 : block_1.dims[i];
     }
+
 #pragma omp parallel for
     for (int i = start[0]; i < finish[0]; ++i) {
         for (int j = start[1]; j < finish[1]; ++j) {
@@ -245,6 +246,7 @@ void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
         start[i] = is_first_block[i] ? 1 : 0;
         finish[i] = is_last_block[i] ? block_2.dims[i] - 1 : block_2.dims[i];
     }
+
 #pragma omp parallel for
     for (int i = start[0]; i < finish[0]; ++i) {
         for (int j = start[1]; j < finish[1]; ++j) {
@@ -259,6 +261,8 @@ void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
 
 double Solver::compute_max_err(Block3D<double> &block, double t) {
     double err, val, max_err = 0.0;
+
+#pragma parallel for reduction(max : max_err)
     for (int i = 0; i < block.dims[0]; ++i) {
         for (int j = 0; j < block.dims[1]; ++j) {
             for (int k = 0; k < block.dims[2]; ++k) {
@@ -269,9 +273,7 @@ double Solver::compute_max_err(Block3D<double> &block, double t) {
                     analytical.grid(i, j, k) = val;
                     errs.grid(i, j, k) = err;
                 }
-                if (err > max_err) {
-                    max_err = err;
-                }
+                max_err = std::max(max_err, err);
             }
         }
     }
@@ -338,7 +340,7 @@ void Solver::run() {
 
     block_max_err = compute_max_err(blocks[1], 1);
     MPI_Reduce(&block_max_err, &max_err, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
-    if (0 == rank) {
+    if (0 == rank && config.print_layer_err) {
         std::cout << "Layer 1 error: " << max_err << std::endl;
     }
 
@@ -350,7 +352,7 @@ void Solver::run() {
         // compute err
         block_max_err = compute_max_err(blocks[2], t);
         MPI_Reduce(&block_max_err, &layer_max_err, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
-        if (0 == rank) {
+        if (0 == rank && config.print_layer_err) {
             std::cout << "Layer " << t << " error: " << layer_max_err << std::endl;
         }
         if (layer_max_err > max_err) {
@@ -381,7 +383,10 @@ void Solver::run() {
         std::swap(blocks[0], blocks[1]);
     }
     if (0 == rank) {
-        std::cout << std::endl << "Maximum error: " << max_err << std::endl;
+        if (config.print_layer_err) {
+            std::cout << std::endl;
+        }
+        std::cout << "Maximum error: " << max_err << std::endl;
     }
 }
 

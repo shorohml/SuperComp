@@ -9,6 +9,7 @@ struct Config {
     int N[3];
     int periodic[3];
     int K;
+    bool print_layer_err;
     bool save_layers;
     int save_step;
     std::string layers_path;
