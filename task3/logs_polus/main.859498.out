@@ -1,0 +1,69 @@
+Sender: LSF System <lsfadmin@polus-c1-ib.bmc.hpc.cs.msu.ru>
+Subject: Job 859498: <# this file was automaticly created by mpisubmit.pl script for edu-cmc-skmodel21-622-19 #;source /polusfs/setenv/setup.SMPI;#BSUB -n 40;#BSUB -W 00:15;#BSUB -o main.%J.out;#BSUB -e main.%J.err;OMP_NUM_THREADS=1 mpiexec main configs/config_256_pi.ini> in cluster <MSUCluster> Done
+
+Job <# this file was automaticly created by mpisubmit.pl script for edu-cmc-skmodel21-622-19 #;source /polusfs/setenv/setup.SMPI;#BSUB -n 40;#BSUB -W 00:15;#BSUB -o main.%J.out;#BSUB -e main.%J.err;OMP_NUM_THREADS=1 mpiexec main configs/config_256_pi.ini> was submitted from host <polus-ib.bmc.hpc.cs.msu.ru> by user <edu-cmc-skmodel21-622-19> in cluster <MSUCluster> at Tue Dec 21 17:47:58 2021
+Job was executed on host(s) <20*polus-c1-ib.bmc.hpc.cs.msu.ru>, in queue <short>, as user <edu-cmc-skmodel21-622-19> in cluster <MSUCluster> at Tue Dec 21 17:47:58 2021
+                            <20*polus-c2-ib.bmc.hpc.cs.msu.ru>
+</home_edu/edu-cmc-skmodel21-622/edu-cmc-skmodel21-622-19> was used as the home directory.
+</home_edu/edu-cmc-skmodel21-622/edu-cmc-skmodel21-622-19/task3> was used as the working directory.
+Started at Tue Dec 21 17:47:58 2021
+Terminated at Tue Dec 21 17:48:01 2021
+Results reported at Tue Dec 21 17:48:01 2021
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+# this file was automaticly created by mpisubmit.pl script for edu-cmc-skmodel21-622-19 #
+source /polusfs/setenv/setup.SMPI
+#BSUB -n 40
+#BSUB -W 00:15
+#BSUB -o main.%J.out
+#BSUB -e main.%J.err
+OMP_NUM_THREADS=1 mpiexec main configs/config_256_pi.ini
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   66.21 sec.
+    Max Memory :                                 1290 MB
+    Average Memory :                             860.33 MB
+    Total Requested Memory :                     -
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              24
+    Max Threads :                                69
+    Run time :                                   2 sec.
+    Turnaround time :                            3 sec.
+
+The output (if any) follows:
+
+Config:
+L_x: 3.14159
+L_y: 3.14159
+L_z: 3.14159
+T: 0.025
+N_x: 256
+N_y: 256
+N_z: 256
+Boundary condition on axis 0 - periodic
+Boundary condition on axis 1 - periodic
+Boundary condition on axis 2 - periodic
+K: 20
+save_layers: 0
+save_step: 5
+layers_path: ./layers/
+
+Number of processes: 40
+
+Maximum error: 5.98586e-06
+Ellapsed time: 1.51976
+
+
+PS:
+
+Read file <main.859498.err> for stderr output of this job.
+
