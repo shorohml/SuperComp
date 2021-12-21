@@ -35,7 +35,7 @@ Solver::Solver(const std::string &config_path, int argc, char **argv)
 
     if (0 == rank) {
         config.print();
-    
+
         std::cout << "Number of processes: " << size << std::endl << std::endl;
     }
 
@@ -187,12 +187,13 @@ void Solver::send_boundary_values(Block3D<double> &block) {
         if (is_first_block[axis] && config.periodic[axis]) {
             switch (axis) {
             case 0:
-                MPI_Isend(block.grid.data() + bound.faces[2 * axis].size(), bound.faces[2 * axis].size(), MPI_DOUBLE, src,
-                          2 * axis, comm, &requests[2 * axis]);
+                MPI_Isend(block.grid.data() + bound.faces[2 * axis].size(),
+                          bound.faces[2 * axis].size(), MPI_DOUBLE, src, 2 * axis, comm,
+                          &requests[2 * axis]);
                 break;
             case 1:
-                MPI_Isend(block.grid.data() + block.dims[2 * axis], 1, face_type_1, src, 2 * axis, comm,
-                          &requests[2 * axis]);
+                MPI_Isend(block.grid.data() + block.dims[2 * axis], 1, face_type_1, src, 2 * axis,
+                          comm, &requests[2 * axis]);
                 break;
             case 2:
                 MPI_Isend(block.grid.data() + 1, 1, face_type_2, src, 2 * axis, comm,
