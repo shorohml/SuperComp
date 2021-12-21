@@ -93,33 +93,118 @@ void Solver::compute_layer_0(Block3D<double> &block) {
     }
 }
 
+namespace {
+template <typename T> void set(std::vector<T> vec, T val) {
+    for (std::size_t i = 0; i < vec.size(); ++i) {
+        vec[i] = val;
+    }
+}
+
+void whait_all(std::vector<bool> &send_recv, std::vector<MPI_Request> &requests,
+               std::vector<MPI_Status> &statuses) {
+    for (std::size_t i = 0; i < requests.size(); ++i) {
+        if (send_recv[i]) {
+            MPI_Waitall(1, requests.data() + i, statuses.data() + i);
+        }
+    }
+}
+} // namespace
+
 void Solver::send_data(Block3D<double> &block) {
+    std::vector<bool> send_recv(2);
+    std::vector<MPI_Request> requests(2);
+    std::vector<MPI_Status> statuses(2);
     int src, dst;
 
     // axis 0
     MPI_Cart_shift(comm, 0, 1, &src, &dst);
-    MPI_Sendrecv(block.grid.data(), bound.faces[1].size(), MPI_DOUBLE, src, 0,
-                 bound.faces[1].data(), bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm,
-                 MPI_STATUS_IGNORE);
-    MPI_Sendrecv(block.grid.data() + (block.dims[0] - 1) * bound.faces[1].size(),
-                 bound.faces[1].size(), MPI_DOUBLE, dst, 0, bound.faces[0].data(),
-                 bound.faces[0].size(), MPI_DOUBLE, src, 0, comm, MPI_STATUS_IGNORE);
+
+    // <- [...] <-
+    set(send_recv, false);
+    if (is_first_block[0] && config.periodic[0] || !is_first_block[0]) {
+        MPI_Isend(block.grid.data(), bound.faces[1].size(), MPI_DOUBLE, src, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_last_block[0] && config.periodic[0] || !is_last_block[0]) {
+        MPI_Irecv(bound.faces[1].data(), bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // -> [...] ->
+    set(send_recv, false);
+    if (is_last_block[0] && config.periodic[0] || !is_last_block[0]) {
+        MPI_Isend(block.grid.data() + (block.dims[0] - 1) * bound.faces[1].size(),
+                  bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_first_block[0] && config.periodic[0] || !is_first_block[0]) {
+        MPI_Irecv(bound.faces[0].data(), bound.faces[0].size(), MPI_DOUBLE, src, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
 
     // axis 1
     MPI_Cart_shift(comm, 1, 1, &src, &dst);
-    MPI_Sendrecv(block.grid.data(), 1, face_type_1, src, 0, bound.faces[3].data(),
-                 bound.faces[3].size(), MPI_DOUBLE, dst, 0, comm, MPI_STATUS_IGNORE);
-    MPI_Sendrecv(block.grid.data() + (block.dims[1] - 1) * block.dims[2], 1, face_type_1, dst, 0,
-                 bound.faces[2].data(), bound.faces[2].size(), MPI_DOUBLE, src, 0, comm,
-                 MPI_STATUS_IGNORE);
+
+    // <- [...] <-
+    set(send_recv, false);
+    if (is_first_block[1] && config.periodic[1] || !is_first_block[1]) {
+        MPI_Isend(block.grid.data(), 1, face_type_1, src, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_last_block[1] && config.periodic[1] || !is_last_block[1]) {
+        MPI_Irecv(bound.faces[3].data(), bound.faces[3].size(), MPI_DOUBLE, dst, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // -> [...] ->
+    set(send_recv, false);
+    if (is_last_block[1] && config.periodic[1] || !is_last_block[1]) {
+        MPI_Isend(block.grid.data() + (block.dims[1] - 1) * block.dims[2], 1, face_type_1, dst, 0,
+                  comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_first_block[1] && config.periodic[1] || !is_first_block[1]) {
+        MPI_Irecv(bound.faces[2].data(), bound.faces[2].size(), MPI_DOUBLE, src, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
 
     // axis 2
     MPI_Cart_shift(comm, 2, 1, &src, &dst);
-    MPI_Sendrecv(block.grid.data(), 1, face_type_2, src, 0, bound.faces[5].data(),
-                 bound.faces[5].size(), MPI_DOUBLE, dst, 0, comm, MPI_STATUS_IGNORE);
-    MPI_Sendrecv(block.grid.data() + block.dims[2] - 1, 1, face_type_2, dst, 0,
-                 bound.faces[4].data(), bound.faces[4].size(), MPI_DOUBLE, src, 0, comm,
-                 MPI_STATUS_IGNORE);
+
+    // <- [...] <-
+    set(send_recv, false);
+    if (is_first_block[2] && config.periodic[2] || !is_first_block[2]) {
+        MPI_Isend(block.grid.data(), 1, face_type_2, src, 0, comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_last_block[2] && config.periodic[2] || !is_last_block[2]) {
+        MPI_Irecv(bound.faces[5].data(), bound.faces[5].size(), MPI_DOUBLE, dst, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
+
+    // -> [...] ->
+    set(send_recv, false);
+    if (is_last_block[2] && config.periodic[2] || !is_last_block[2]) {
+        MPI_Isend(block.grid.data() + block.dims[2] - 1, 1, face_type_2, dst, 0,
+                  comm, &requests[0]);
+        send_recv[0] = true;
+    }
+    if (is_first_block[2] && config.periodic[2] || !is_first_block[2]) {
+        MPI_Irecv(bound.faces[4].data(), bound.faces[4].size(), MPI_DOUBLE, src, 0, comm,
+                  &requests[1]);
+        send_recv[1] = true;
+    }
+    whait_all(send_recv, requests, statuses);
 }
 
 double Solver::find_value(Block3D<double> &block, Block3DBound<double> &bound, int i, int j,
