@@ -35,6 +35,8 @@ Solver::Solver(const std::string &config_path, int argc, char **argv)
 
     if (0 == rank) {
         config.print();
+    
+        std::cout << "Number of processes: " << size << std::endl << std::endl;
     }
 
     tau = config.T / config.K;
