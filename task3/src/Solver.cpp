@@ -94,227 +94,151 @@ void Solver::compute_layer_0(Block3D<double> &block) {
 }
 
 namespace {
-template <typename T> void set(std::vector<T> vec, T val) {
-    for (std::size_t i = 0; i < vec.size(); ++i) {
-        vec[i] = val;
-    }
-}
-
-void whait_all(std::vector<bool> &send_recv, std::vector<MPI_Request> &requests,
-               std::vector<MPI_Status> &statuses) {
+void whait_all(std::vector<bool> &send, std::vector<MPI_Request> &requests) {
     for (std::size_t i = 0; i < requests.size(); ++i) {
-        if (send_recv[i]) {
-            MPI_Waitall(1, requests.data() + i, statuses.data() + i);
+        if (send[i]) {
+            MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
         }
     }
 }
 } // namespace
 
 void Solver::send_inner_values(Block3D<double> &block) {
-    std::vector<bool> send_recv(2);
-    std::vector<MPI_Request> requests(2);
-    std::vector<MPI_Status> statuses(2);
+    std::vector<bool> send(6, false);
+    std::vector<MPI_Request> requests(6);
     int src, dst;
 
-    // axis 0
-    MPI_Cart_shift(comm, 0, 1, &src, &dst);
+    // send
+    for (int axis = 0; axis < 3; ++axis) {
+        MPI_Cart_shift(comm, axis, 1, &src, &dst);
 
-    // <- [...] <-
-    set(send_recv, false);
-    if (!is_first_block[0]) {
-        // send u_0jk
-        MPI_Isend(block.grid.data(), bound.faces[1].size(), MPI_DOUBLE, src, 0, comm, &requests[0]);
-        send_recv[0] = true;
+        // <- [...]
+        if (!is_first_block[axis]) {
+            switch (axis) {
+            case 0:
+                MPI_Isend(block.grid.data(), bound.faces[2 * axis].size(), MPI_DOUBLE, src,
+                          2 * axis, comm, &requests[2 * axis]);
+                break;
+            case 1:
+                MPI_Isend(block.grid.data(), 1, face_type_1, src, 2 * axis, comm,
+                          &requests[2 * axis]);
+                break;
+            case 2:
+                MPI_Isend(block.grid.data(), 1, face_type_2, src, 2 * axis, comm,
+                          &requests[2 * axis]);
+                break;
+            }
+            send[2 * axis] = true;
+        }
+        // [...] ->
+        if (!is_last_block[axis]) {
+            switch (axis) {
+            case 0:
+                MPI_Isend(block.grid.data() +
+                              (block.dims[0] - 1) * bound.faces[2 * axis + 1].size(),
+                          bound.faces[2 * axis + 1].size(), MPI_DOUBLE, dst, 2 * axis + 1, comm,
+                          &requests[2 * axis + 1]);
+                break;
+            case 1:
+                MPI_Isend(block.grid.data() + (block.dims[1] - 1) * block.dims[2], 1, face_type_1,
+                          dst, 2 * axis + 1, comm, &requests[2 * axis + 1]);
+                break;
+            case 2:
+                MPI_Isend(block.grid.data() + block.dims[2] - 1, 1, face_type_2, dst, 2 * axis + 1,
+                          comm, &requests[2 * axis + 1]);
+                break;
+            }
+            send[2 * axis + 1] = true;
+        }
     }
-    if (!is_last_block[0]) {
-        MPI_Irecv(bound.faces[1].data(), bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
 
-    // -> [...] ->
-    set(send_recv, false);
-    if (!is_last_block[0]) {
-        // send u_Njk
-        MPI_Isend(block.grid.data() + (block.dims[0] - 1) * bound.faces[1].size(),
-                  bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm, &requests[0]);
-        send_recv[0] = true;
-    }
-    if (!is_first_block[0]) {
-        MPI_Irecv(bound.faces[0].data(), bound.faces[0].size(), MPI_DOUBLE, src, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
+    // recv
+    for (int axis = 0; axis < 3; ++axis) {
+        MPI_Cart_shift(comm, axis, 1, &src, &dst);
 
-    // axis 1
-    MPI_Cart_shift(comm, 1, 1, &src, &dst);
+        // -> [...]
+        if (!is_first_block[axis]) {
+            MPI_Recv(bound.faces[2 * axis].data(), bound.faces[2 * axis].size(), MPI_DOUBLE, src,
+                     2 * axis + 1, comm, MPI_STATUS_IGNORE);
+        }
 
-    // <- [...] <-
-    set(send_recv, false);
-    if (!is_first_block[1]) {
-        // send u_i0k
-        MPI_Isend(block.grid.data(), 1, face_type_1, src, 0, comm, &requests[0]);
-        send_recv[0] = true;
+        // [...] <-
+        if (!is_last_block[axis]) {
+            MPI_Recv(bound.faces[2 * axis + 1].data(), bound.faces[2 * axis + 1].size(), MPI_DOUBLE,
+                     dst, 2 * axis, comm, MPI_STATUS_IGNORE);
+        }
     }
-    if (!is_last_block[1]) {
-        MPI_Irecv(bound.faces[3].data(), bound.faces[3].size(), MPI_DOUBLE, dst, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
 
-    // -> [...] ->
-    set(send_recv, false);
-    if (!is_last_block[1]) {
-        // send u_iNk
-        MPI_Isend(block.grid.data() + (block.dims[1] - 1) * block.dims[2], 1, face_type_1, dst, 0,
-                  comm, &requests[0]);
-        send_recv[0] = true;
-    }
-    if (!is_first_block[1]) {
-        MPI_Irecv(bound.faces[2].data(), bound.faces[2].size(), MPI_DOUBLE, src, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
-
-    // axis 2
-    MPI_Cart_shift(comm, 2, 1, &src, &dst);
-
-    // <- [...] <-
-    set(send_recv, false);
-    if (!is_first_block[2]) {
-        // send u_ij0
-        MPI_Isend(block.grid.data(), 1, face_type_2, src, 0, comm, &requests[0]);
-        send_recv[0] = true;
-    }
-    if (!is_last_block[2]) {
-        MPI_Irecv(bound.faces[5].data(), bound.faces[5].size(), MPI_DOUBLE, dst, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
-
-    // -> [...] ->
-    set(send_recv, false);
-    if (!is_last_block[2]) {
-        // send u_ijN
-        MPI_Isend(block.grid.data() + block.dims[2] - 1, 1, face_type_2, dst, 0, comm,
-                  &requests[0]);
-        send_recv[0] = true;
-    }
-    if (!is_first_block[2]) {
-        MPI_Irecv(bound.faces[4].data(), bound.faces[4].size(), MPI_DOUBLE, src, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
+    whait_all(send, requests);
 }
 
 void Solver::send_boundary_values(Block3D<double> &block) {
-    std::vector<bool> send_recv(2);
-    std::vector<MPI_Request> requests(2);
-    std::vector<MPI_Status> statuses(2);
+    std::vector<bool> send(6, false);
+    std::vector<MPI_Request> requests(6);
     int src, dst;
 
-    // axis 0
-    MPI_Cart_shift(comm, 0, 1, &src, &dst);
+    // send
+    for (int axis = 0; axis < 3; ++axis) {
+        MPI_Cart_shift(comm, axis, 1, &src, &dst);
 
-    // <- [...] <-
-    set(send_recv, false);
-    if (is_first_block[0] && config.periodic[0]) {
-        // send u_1jk
-        MPI_Isend(block.grid.data() + bound.faces[1].size(), bound.faces[1].size(), MPI_DOUBLE, src,
-                  0, comm, &requests[0]);
-        send_recv[0] = true;
+        // <- [...]
+        if (is_first_block[axis] && config.periodic[axis]) {
+            switch (axis) {
+            case 0:
+                MPI_Isend(block.grid.data() + bound.faces[2 * axis].size(), bound.faces[2 * axis].size(), MPI_DOUBLE, src,
+                          2 * axis, comm, &requests[2 * axis]);
+                break;
+            case 1:
+                MPI_Isend(block.grid.data() + block.dims[2 * axis], 1, face_type_1, src, 2 * axis, comm,
+                          &requests[2 * axis]);
+                break;
+            case 2:
+                MPI_Isend(block.grid.data() + 1, 1, face_type_2, src, 2 * axis, comm,
+                          &requests[2 * axis]);
+                break;
+            }
+            send[2 * axis] = true;
+        }
+        // [...] ->
+        if (is_last_block[axis] && config.periodic[axis]) {
+            switch (axis) {
+            case 0:
+                MPI_Isend(block.grid.data() +
+                              (block.dims[0] - 2) * bound.faces[2 * axis + 1].size(),
+                          bound.faces[2 * axis + 1].size(), MPI_DOUBLE, dst, 2 * axis + 1, comm,
+                          &requests[2 * axis + 1]);
+                break;
+            case 1:
+                MPI_Isend(block.grid.data() + (block.dims[1] - 2) * block.dims[2], 1, face_type_1,
+                          dst, 2 * axis + 1, comm, &requests[2 * axis + 1]);
+                break;
+            case 2:
+                MPI_Isend(block.grid.data() + block.dims[2] - 2, 1, face_type_2, dst, 2 * axis + 1,
+                          comm, &requests[2 * axis + 1]);
+                break;
+            }
+            send[2 * axis + 1] = true;
+        }
     }
-    if (is_last_block[0] && config.periodic[0]) {
-        MPI_Irecv(bound.faces[1].data(), bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
 
-    // -> [...] ->
-    set(send_recv, false);
-    if (is_last_block[0] && config.periodic[0]) {
-        // send u_(N - 1)jk
-        MPI_Isend(block.grid.data() + (block.dims[0] - 2) * bound.faces[1].size(),
-                  bound.faces[1].size(), MPI_DOUBLE, dst, 0, comm, &requests[0]);
-        send_recv[0] = true;
-    }
-    if (is_first_block[0] && config.periodic[0]) {
-        MPI_Irecv(bound.faces[0].data(), bound.faces[0].size(), MPI_DOUBLE, src, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
+    // recv
+    for (int axis = 0; axis < 3; ++axis) {
+        MPI_Cart_shift(comm, axis, 1, &src, &dst);
 
-    // axis 1
-    MPI_Cart_shift(comm, 1, 1, &src, &dst);
+        // -> [...]
+        if (is_first_block[axis] && config.periodic[axis]) {
+            MPI_Recv(bound.faces[2 * axis].data(), bound.faces[2 * axis].size(), MPI_DOUBLE, src,
+                     2 * axis + 1, comm, MPI_STATUS_IGNORE);
+        }
 
-    // <- [...] <-
-    set(send_recv, false);
-    if (is_first_block[1] && config.periodic[1]) {
-        // send u_i1k
-        MPI_Isend(block.grid.data() + block.dims[2], 1, face_type_1, src, 0, comm, &requests[0]);
-        send_recv[0] = true;
+        // [...] <-
+        if (is_last_block[axis] && config.periodic[axis]) {
+            MPI_Recv(bound.faces[2 * axis + 1].data(), bound.faces[2 * axis + 1].size(), MPI_DOUBLE,
+                     dst, 2 * axis, comm, MPI_STATUS_IGNORE);
+        }
     }
-    if (is_last_block[1] && config.periodic[1]) {
-        MPI_Irecv(bound.faces[3].data(), bound.faces[3].size(), MPI_DOUBLE, dst, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
 
-    // -> [...] ->
-    set(send_recv, false);
-    if (is_last_block[1] && config.periodic[1]) {
-        // send u_i(N - 1)k
-        MPI_Isend(block.grid.data() + (block.dims[1] - 2) * block.dims[2], 1, face_type_1, dst, 0,
-                  comm, &requests[0]);
-        send_recv[0] = true;
-    }
-    if (is_first_block[1] && config.periodic[1]) {
-        MPI_Irecv(bound.faces[2].data(), bound.faces[2].size(), MPI_DOUBLE, src, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
-
-    // axis 2
-    MPI_Cart_shift(comm, 2, 1, &src, &dst);
-
-    // <- [...] <-
-    set(send_recv, false);
-    if (is_first_block[2] && config.periodic[2]) {
-        // send u_ij1
-        MPI_Isend(block.grid.data() + 1, 1, face_type_2, src, 0, comm, &requests[0]);
-        send_recv[0] = true;
-    }
-    if (is_last_block[2] && config.periodic[2]) {
-        MPI_Irecv(bound.faces[5].data(), bound.faces[5].size(), MPI_DOUBLE, dst, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
-
-    // -> [...] ->
-    set(send_recv, false);
-    if (is_last_block[2] && config.periodic[2]) {
-        // send u_ij(N - 1)
-        MPI_Isend(block.grid.data() + block.dims[2] - 2, 1, face_type_2, dst, 0, comm,
-                  &requests[0]);
-        send_recv[0] = true;
-    }
-    if (is_first_block[2] && config.periodic[2]) {
-        MPI_Irecv(bound.faces[4].data(), bound.faces[4].size(), MPI_DOUBLE, src, 0, comm,
-                  &requests[1]);
-        send_recv[1] = true;
-    }
-    whait_all(send_recv, requests, statuses);
+    whait_all(send, requests);
 }
 
 double Solver::find_value(Block3D<double> &block, Block3DBound<double> &bound, int i, int j,
@@ -469,7 +393,7 @@ void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
 double Solver::compute_max_err(Block3D<double> &block, double t) {
     double err, val, max_err = 0.0;
 
-#pragma parallel for reduction(max : max_err)
+    // no max reduction in BlueGene's compiler, so no openmp
     for (int i = 0; i < block.dims[0]; ++i) {
         for (int j = 0; j < block.dims[1]; ++j) {
             for (int k = 0; k < block.dims[2]; ++k) {
@@ -516,6 +440,7 @@ void Solver::save_layer(Block3D<double> &block, const std::string &path) {
                       comm, &request);
             MPI_Waitall(1, &request, &status);
 
+#pragma omp parallel for
             for (int i = send_block.start[0]; i < send_block.finish[0]; ++i) {
                 for (int j = send_block.start[1]; j < send_block.finish[1]; ++j) {
                     for (int k = send_block.start[2]; k < send_block.finish[2]; ++k) {
