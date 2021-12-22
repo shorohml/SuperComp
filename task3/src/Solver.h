@@ -30,7 +30,7 @@ class Solver {
     MPI_Datatype face_type_1;
     MPI_Datatype face_type_2;
 
-    // u from hyperbolic equation
+    // analytical u
     U4D<double> u4d;
 
     // parameters

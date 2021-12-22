@@ -10,15 +10,16 @@ from pyface.api import GUI
 from skimage.io import imsave
 
 
-OPACITY = 0.02
+OPACITY = 0.01
 FIG_SIZE = (1024, 1024)
+ZOOM = 0.8
 
 
 def render_volume(volume_path: Path, img_path: Path, grid_size: Tuple[int, int, int]):
     data = np.fromfile(volume_path, dtype=np.float64)
     data = data.reshape(grid_size)
 
-    fig = mlab.figure(size=FIG_SIZE)
+    fig = mlab.figure(size=FIG_SIZE, fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
 
     vol = mlab.pipeline.volume(
         mlab.pipeline.scalar_field(data),
@@ -34,18 +35,16 @@ def render_volume(volume_path: Path, img_path: Path, grid_size: Tuple[int, int, 
     vol._volume_property.set_scalar_opacity(otf)
 
     cam = fig.scene.camera
-    cam.zoom(0.7)
+    cam.zoom(ZOOM)
 
     ax = mlab.axes(
         ranges=(0, grid_size[0] - 1, 0, grid_size[1] - 1, 0, grid_size[2] - 1))
     ax.axes.label_format = '%.0f'
-    mlab.outline()
+    mlab.outline(color=(0.5, 0.5, 0.5), line_width=3.0)
     mlab.colorbar(orientation='vertical')
 
-    # mlab.test_plot3d()
     GUI().process_events()
 
-    # fig = mlab.gcf()
     fig.scene._lift()
 
     arr = mlab.screenshot(figure=fig)
