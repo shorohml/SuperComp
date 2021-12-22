@@ -396,7 +396,7 @@ void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
 double Solver::compute_max_err(Block3D<double> &block, double t) {
     double err, val, max_err = 0.0;
 
-    // no max reduction in BlueGene's compiler, so no openmp
+    // no max reduction in Blue Gene's compiler, so no OpenMP here
     for (int i = 0; i < block.dims[0]; ++i) {
         for (int j = 0; j < block.dims[1]; ++j) {
             for (int k = 0; k < block.dims[2]; ++k) {
