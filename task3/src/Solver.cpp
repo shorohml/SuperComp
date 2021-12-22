@@ -394,23 +394,36 @@ void Solver::compute_layer_2(Block3D<double> &block_0, Block3D<double> &block_1,
 }
 
 double Solver::compute_max_err(Block3D<double> &block, double t) {
-    double err, val, max_err = 0.0;
+    double max_err = 0.0;
 
-    // no max reduction in Blue Gene's compiler, so no OpenMP here
-    for (int i = 0; i < block.dims[0]; ++i) {
-        for (int j = 0; j < block.dims[1]; ++j) {
-            for (int k = 0; k < block.dims[2]; ++k) {
-                val = u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
-                          L_N[2] * (k + block.start[2]), tau * t);
-                err = fabs(block.grid(i, j, k) - val);
-                if (config.save_layers) {
-                    analytical.grid(i, j, k) = val;
-                    errs.grid(i, j, k) = err;
+#pragma omp parallel
+    {
+        double val, err, max_err_local = 0.0;
+
+#pragma omp for nowait
+        for (int i = 0; i < block.dims[0]; ++i) {
+            for (int j = 0; j < block.dims[1]; ++j) {
+                for (int k = 0; k < block.dims[2]; ++k) {
+                    val = u4d(L_N[0] * (i + block.start[0]), L_N[1] * (j + block.start[1]),
+                              L_N[2] * (k + block.start[2]), tau * t);
+                    err = fabs(block.grid(i, j, k) - val);
+                    if (config.save_layers) {
+                        analytical.grid(i, j, k) = val;
+                        errs.grid(i, j, k) = err;
+                    }
+                    max_err_local = std::max(max_err_local, err);
                 }
-                max_err = std::max(max_err, err);
+            }
+        }
+
+#pragma omp critical
+        {
+            if (max_err_local > max_err) {
+                max_err = max_err_local;
             }
         }
     }
+
     return max_err;
 }
 
@@ -425,6 +438,7 @@ void Solver::save_layer(Block3D<double> &block, const std::string &path) {
         Grid3D<double> grid(config.N[0] + 1, config.N[1] + 1, config.N[2] + 1);
 
         // collect grid from blocks
+#pragma omp parallel for
         for (int i = block.start[0]; i < block.finish[0]; ++i) {
             for (int j = block.start[1]; j < block.finish[1]; ++j) {
                 for (int k = block.start[2]; k < block.finish[2]; ++k) {
@@ -524,14 +538,14 @@ void Solver::run() {
 }
 
 Solver::~Solver() {
-    double ellapsed, max_ellapsed;
+    double elapsed, max_elapsed;
 
     finish = MPI_Wtime();
 
-    ellapsed = finish - start;
-    MPI_Reduce(&ellapsed, &max_ellapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    elapsed = finish - start;
+    MPI_Reduce(&elapsed, &max_elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     if (0 == rank) {
-        std::cout << "Ellapsed time: " << max_ellapsed << std::endl;
+        std::cout << "Elapsed time: " << max_elapsed << std::endl;
     }
 
     MPI_Finalize();

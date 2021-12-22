@@ -1,0 +1,20 @@
+Config:
+L_x: 3.14159
+L_y: 3.14159
+L_z: 3.14159
+T: 0.025
+N_x: 256
+N_y: 256
+N_z: 256
+Boundary condition on axis 0 - periodic
+Boundary condition on axis 1 - periodic
+Boundary condition on axis 2 - periodic
+K: 20
+save_layers: 0
+save_step: 5
+layers_path: ./layers/
+
+Number of processes: 64
+
+Maximum error: 5.98586e-06
+Elapsed time: 2.73888
