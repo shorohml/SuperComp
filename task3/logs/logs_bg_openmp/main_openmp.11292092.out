@@ -1,7 +1,7 @@
 Config:
-L_x: 3.14159
-L_y: 3.14159
-L_z: 3.14159
+L_x: 1
+L_y: 1
+L_z: 1
 T: 0.025
 N_x: 128
 N_y: 128
@@ -16,5 +16,5 @@ layers_path: ./layers/
 
 Number of processes: 64
 
-Maximum error: 2.43122e-05
-Elapsed time: 0.394427
+Maximum error: 0.000217197
+Elapsed time: 0.403208

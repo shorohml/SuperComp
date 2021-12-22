@@ -14,7 +14,7 @@ save_layers: 0
 save_step: 5
 layers_path: ./layers/
 
-Number of processes: 128
+Number of processes: 512
 
 Maximum error: 1.4015e-06
-Elapsed time: 10.5395
+Elapsed time: 2.71142

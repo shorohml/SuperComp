@@ -3,9 +3,9 @@ L_x: 1
 L_y: 1
 L_z: 1
 T: 0.025
-N_x: 128
-N_y: 128
-N_z: 128
+N_x: 256
+N_y: 256
+N_z: 256
 Boundary condition on axis 0 - periodic
 Boundary condition on axis 1 - periodic
 Boundary condition on axis 2 - periodic
@@ -16,5 +16,5 @@ layers_path: ./layers/
 
 Number of processes: 64
 
-Maximum error: 0.000217197
-Elapsed time: 0.40302
+Maximum error: 4.55295e-05
+Elapsed time: 2.81236
